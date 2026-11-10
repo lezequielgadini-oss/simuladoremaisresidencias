@@ -581,7 +581,7 @@
       <div class="panel-head"><div class="meta">Usuários cadastrados</div></div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th></tr></thead>
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Ações</th></tr></thead>
           <tbody id="usuariosTbody"></tbody>
         </table>
       </div>
@@ -2652,17 +2652,57 @@
    * mesmo administrador. */
   function loadUsuarios(){
     if (!supa) return;
-    supa.from('profiles').select('id,email,nome,papel').order('nome', {ascending:true}).then(function(res){
+    supa.from('profiles').select('id,email,nome,papel,principal').order('nome', {ascending:true}).then(function(res){
       if (res.error){ console.error(res.error); return; }
       renderUsuarios(res.data || []);
     });
   }
+  /* Edição de papel: qualquer administrador pode mudar o papel de outro
+   * usuário (o RLS de public.profiles já garante isso no servidor). Duas
+   * exceções ficam sem controle de edição, por segurança:
+   * - a própria linha de quem está logado (evita se trancar fora sem querer);
+   * - a linha do administrador principal (protegida também por um trigger
+   *   no banco, então a tentativa falharia de qualquer forma). */
   function renderUsuarios(list){
     var tbody = document.getElementById('usuariosTbody');
     if (!tbody) return;
+    var meuId = CURRENT_PROFILE && CURRENT_PROFILE.id;
     tbody.innerHTML = list.map(function(u){
-      return '<tr><td>'+esc(u.nome||'—')+'</td><td>'+esc(u.email||'—')+'</td><td>'+esc(PAPEL_LABELS[u.papel]||u.papel)+'</td></tr>';
+      var nomeCell = esc(u.nome||'—') + (u.principal ? ' <span class="pill" style="background:var(--accent-soft); color:var(--accent-dark); margin-left:6px;">Principal</span>' : '');
+      var acoesCell;
+      if (u.principal || u.id === meuId){
+        acoesCell = '<span style="color:var(--text-muted); font-size:12px;">—</span>';
+      } else {
+        var opts = ['corretor_interno','coordenador_vendas','administrador'].map(function(p){
+          return '<option value="'+p+'"'+(p===u.papel?' selected':'')+'>'+esc(PAPEL_LABELS[p])+'</option>';
+        }).join('');
+        acoesCell = '<select class="usr-papel-sel" data-id="'+esc(u.id)+'" style="margin-right:6px;">'+opts+'</select>'
+          + '<button class="btn btn-ghost usr-papel-save" type="button" data-id="'+esc(u.id)+'">Salvar</button>';
+      }
+      return '<tr><td>'+nomeCell+'</td><td>'+esc(u.email||'—')+'</td><td>'+esc(PAPEL_LABELS[u.papel]||u.papel)+'</td><td>'+acoesCell+'</td></tr>';
     }).join('');
+    tbody.querySelectorAll('.usr-papel-save').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var sel = tbody.querySelector('select.usr-papel-sel[data-id="'+id+'"]');
+        if (!sel || !supa) return;
+        var novoPapel = sel.value;
+        var prevText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Salvando…';
+        supa.from('profiles').update({papel: novoPapel}).eq('id', id).then(function(res){
+          btn.disabled = false;
+          btn.textContent = prevText;
+          if (res.error){
+            console.error(res.error);
+            showToast('Não foi possível alterar o papel: ' + (res.error.message || 'tente novamente') + '.');
+            return;
+          }
+          showToast('Papel atualizado.');
+          loadUsuarios();
+        });
+      });
+    });
   }
   var novoUsuarioFormEl = document.getElementById('novoUsuarioForm');
   if (novoUsuarioFormEl){

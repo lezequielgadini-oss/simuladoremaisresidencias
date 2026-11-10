@@ -2107,7 +2107,15 @@
 
   function renderScenarioCard(s, opts){
     opts = opts || {};
-    var hasRenda = document.getElementById('sRenda').value;
+    /* hasRenda decide só a EXIBIÇÃO do percentual (já calculado e salvo em
+     * cada subPlan na hora da simulação) — nunca o valor em si. No
+     * Simulador ao vivo não tem opts.hasRenda, então cai no campo da tela
+     * (a pessoa pode estar digitando a renda agora). Em qualquer outro
+     * lugar (Histórico, Planner, etc.) isso tem que vir de opts, baseado na
+     * renda que estava gravada NAQUELA simulação — senão o coordenador via
+     * campo "Renda" vazio da própria tela dele e todo comprometimento
+     * aparecia como "—", mesmo quando o corretor tinha informado a renda. */
+    var hasRenda = (opts.hasRenda !== undefined) ? opts.hasRenda : document.getElementById('sRenda').value;
     // Financiamento, subsídio, FGTS, entrada e desconto agora entram na
     // operação de subtração dentro de cada prazo (o desconto muda por
     // prazo). A parcela pós do banco (CEF) não faz parte dessa conta — é um
@@ -2487,7 +2495,8 @@
       }]);
       var multiRodada = rounds.length > 1;
       var roundsHtml = rounds.map(function(r, idx){
-        var scenariosHtml = (r.scenarios||[]).map(function(sc){ return renderScenarioCard(sc, {showLancamento:true}); }).join('');
+        var rendaDaRodada = r.inputs && r.inputs.renda > 0 ? r.inputs.renda : 0;
+        var scenariosHtml = (r.scenarios||[]).map(function(sc){ return renderScenarioCard(sc, {showLancamento:true, hasRenda: rendaDaRodada}); }).join('');
         var label = '';
         if (multiRodada){
           var rd = new Date(r.createdAt);
@@ -2574,6 +2583,11 @@
    * aprovam ou recusam (com observação), o que o RLS/trigger no Supabase
    * também garante — esta UI só mostra as ações permitidas pelo papel. */
   var APROVACAO_LABELS = {nao_enviado:'Não enviada', pendente:'Aguardando aprovação', aprovado:'Aprovada', recusado:'Recusada'};
+  // Controla, por id de simulação, se o campo de texto da recusa está
+  // aberto na tela do coordenador — precisa ficar fora do render porque
+  // histórico/planner re-renderizam tudo a cada atualização do banco, e sem
+  // isso o campo fecharia sozinho enquanto a pessoa ainda está digitando.
+  var openRecusaBox = {};
   function renderAprovacaoBadge(s){
     var st = s._statusAprovacao || 'nao_enviado';
     if (st === 'nao_enviado') return '';
@@ -2589,13 +2603,26 @@
     if (CURRENT_PROFILE.papel === 'corretor_interno' && s._corretorId === CURRENT_PROFILE.id && (st === 'nao_enviado' || st === 'recusado')){
       html += '<button type="button" class="btn btn-ghost aprov-enviar-btn" data-id="'+esc(s.id)+'">Enviar para aprovação</button>';
     }
-    if ((CURRENT_PROFILE.papel === 'coordenador_vendas' || CURRENT_PROFILE.papel === 'administrador') && st === 'pendente'){
-      html += '<div class="aprov-coord-box">'
-        + '<textarea class="aprov-obs" placeholder="Observação (opcional)"></textarea>'
-        + '<div class="picker-pin-actions">'
-        +   '<button type="button" class="btn btn-primary aprov-aprovar-btn" data-id="'+esc(s.id)+'">Aprovar</button>'
-        +   '<button type="button" class="btn btn-ghost aprov-recusar-btn" data-id="'+esc(s.id)+'">Recusar</button>'
-        + '</div></div>';
+    // Coordenador/administrador decide em qualquer simulação ainda não
+    // decidida — não depende mais do corretor clicar em "Enviar para
+    // aprovação" antes (isso ficava confuso: o botão de aprovar/recusar só
+    // aparecia depois desse passo extra). "Aprovar" decide na hora; "Recusar"
+    // abre um campo de texto pra mandar o motivo pro corretor.
+    if ((CURRENT_PROFILE.papel === 'coordenador_vendas' || CURRENT_PROFILE.papel === 'administrador') && (st === 'nao_enviado' || st === 'pendente')){
+      if (openRecusaBox[s.id]){
+        html += '<div class="aprov-coord-box">'
+          + '<textarea class="aprov-obs" placeholder="Mensagem para o corretor (explique o motivo da recusa)"></textarea>'
+          + '<div class="picker-pin-actions">'
+          +   '<button type="button" class="btn btn-primary aprov-recusar-confirm-btn" data-id="'+esc(s.id)+'">Enviar recusa</button>'
+          +   '<button type="button" class="btn btn-ghost aprov-recusar-cancel-btn" data-id="'+esc(s.id)+'">Cancelar</button>'
+          + '</div></div>';
+      } else {
+        html += '<div class="aprov-coord-box">'
+          + '<div class="picker-pin-actions">'
+          +   '<button type="button" class="btn btn-primary aprov-aprovar-btn" data-id="'+esc(s.id)+'">Aprovar</button>'
+          +   '<button type="button" class="btn btn-ghost aprov-recusar-btn" data-id="'+esc(s.id)+'">Recusar</button>'
+          + '</div></div>';
+      }
     }
     if (s._observacaoCoordenador && (st === 'aprovado' || st === 'recusado')){
       html += '<div class="hist-meta">Observação do coordenador: '+esc(s._observacaoCoordenador)+'</div>';
@@ -2611,7 +2638,8 @@
   function decidirAprovacao(id, aprovado, obs){
     if (!db) return;
     db.collection('simulacoes').doc(id).update({statusAprovacao: aprovado ? 'aprovado' : 'recusado', observacaoCoordenador: obs || ''}).then(function(){
-      showToast(aprovado ? 'Simulação aprovada.' : 'Simulação recusada.');
+      delete openRecusaBox[id];
+      showToast(aprovado ? 'Simulação aprovada.' : 'Recusa enviada para o corretor.');
     }).catch(function(e){ console.error(e); showToast('Não foi possível registrar a decisão.'); });
   }
   function wireAprovacaoBlocks(container){
@@ -2622,17 +2650,45 @@
     container.querySelectorAll('.aprov-aprovar-btn').forEach(function(btn){
       btn.addEventListener('click', function(e){
         e.stopPropagation();
-        var box = btn.closest('.aprov-coord-box');
-        var obs = box ? box.querySelector('.aprov-obs').value : '';
-        decidirAprovacao(btn.getAttribute('data-id'), true, obs);
+        decidirAprovacao(btn.getAttribute('data-id'), true, '');
       });
       btn.addEventListener('dragstart', function(e){ e.preventDefault(); e.stopPropagation(); });
     });
+    // "Recusar" não decide na hora — só abre o campo de texto pra
+    // mensagem que vai pro corretor. Quem decide de fato é o botão
+    // "Enviar recusa" dentro da caixa que aparece em seguida.
+    // Reabre só o bloco de ações (sem re-renderizar a linha/card inteiro)
+    // trocando "Aprovar/Recusar" pelo campo de texto, ou vice-versa.
+    function toggleRecusaBox(id, aberto, block){
+      if (aberto) openRecusaBox[id] = true; else delete openRecusaBox[id];
+      var s = SIMULACOES.filter(function(x){ return x.id === id; })[0];
+      if (!block || !s) return;
+      block.innerHTML = renderAprovacaoActions(s);
+      wireAprovacaoBlocks(block);
+    }
     container.querySelectorAll('.aprov-recusar-btn').forEach(function(btn){
       btn.addEventListener('click', function(e){
         e.stopPropagation();
+        var block = btn.closest('.aprov-block');
+        toggleRecusaBox(btn.getAttribute('data-id'), true, block);
+        var ta = block && block.querySelector('.aprov-obs');
+        if (ta) ta.focus();
+      });
+      btn.addEventListener('dragstart', function(e){ e.preventDefault(); e.stopPropagation(); });
+    });
+    container.querySelectorAll('.aprov-recusar-cancel-btn').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        toggleRecusaBox(btn.getAttribute('data-id'), false, btn.closest('.aprov-block'));
+      });
+      btn.addEventListener('dragstart', function(e){ e.preventDefault(); e.stopPropagation(); });
+    });
+    container.querySelectorAll('.aprov-recusar-confirm-btn').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
         var box = btn.closest('.aprov-coord-box');
-        var obs = box ? box.querySelector('.aprov-obs').value : '';
+        var obs = box ? box.querySelector('.aprov-obs').value.trim() : '';
+        if (!obs){ showToast('Escreva uma mensagem pro corretor antes de recusar.'); return; }
         decidirAprovacao(btn.getAttribute('data-id'), false, obs);
       });
       btn.addEventListener('dragstart', function(e){ e.preventDefault(); e.stopPropagation(); });

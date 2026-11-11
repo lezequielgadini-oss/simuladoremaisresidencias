@@ -184,7 +184,7 @@
   .scen-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
   .scen-card{background:var(--surface); border:1.5px solid var(--border-soft); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column;}
   .scen-card.tier-premium{border-color:var(--gold);}
-  .scen-tag{padding:10px 16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#fff;}
+  .scen-tag{padding:10px 16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#fff; display:flex; align-items:center; justify-content:space-between; gap:8px;}
   .scen-tag.economica{background:var(--st-vnd);}
   .scen-tag.intermediaria{background:var(--accent);}
   .scen-tag.premium{background:var(--gold); color:var(--gold-contrast);}
@@ -193,6 +193,11 @@
   .scen-tag.comSacada{background:var(--accent);}
   .scen-tag.garden{background:var(--gold); color:var(--gold-contrast);}
   .scen-card.tier-garden{border-color:var(--gold);}
+  .scen-flag{display:flex; align-items:center; gap:5px; font-size:10px; font-weight:600; text-transform:none; letter-spacing:0; cursor:pointer; white-space:nowrap; color:inherit;}
+  .scen-flag input{margin:0; width:14px; height:14px; cursor:pointer; accent-color:#fff;}
+  .scen-card-sel-pendente{box-shadow:0 0 0 3px var(--st-res) inset, var(--shadow);}
+  .scen-card-sel-aprovado{box-shadow:0 0 0 3px var(--st-vnd) inset, var(--shadow);}
+  .scen-card-sel-recusado{box-shadow:0 0 0 3px var(--danger) inset, var(--shadow);}
   .scen-body{padding:16px 18px; flex:1; display:flex; flex-direction:column; gap:12px;}
   .scen-unit-code{font-size:16px; font-weight:800; font-family:'Archivo',sans-serif;}
   .scen-unit-loc{font-size:11.5px; color:var(--text-muted);}
@@ -787,6 +792,7 @@
   var CURRENT_PROFILE = null; // {id,email,nome,papel} vindo de public.profiles
   var db = null;
   var lastScenarios = null; // holds the last generated 3-scenario result, ready to save
+  var selectedScenarioTier = null; // tier (semSacada/comSacada/garden/economica/.../escolhida) marcado com a flag "enviar p/ aprovação" no Simulador ao vivo
   var ressimulandoId = null; // id da simulação em re-negociação (histórico), ou null
   var SIMULACOES = [];
   var configLoaded = false;
@@ -1722,16 +1728,9 @@
         saldoAposAto: saldoAposAto
       };
     });
-    // 30 meses é sempre a melhor opção (maior desconto). Assim que um prazo
-    // já quita o saldo todo do cliente respeitando as regras (teto de 30% na
-    // pré, teto de 55% na pós, parcela pós mínima de R$500), não faz sentido
-    // mostrar prazos mais longos abaixo dele — eles só teriam desconto pior
-    // para resolver o mesmo saldo.
-    var cutIdx = -1;
-    for (var k=0; k<subPlans.length; k++){
-      if (!subPlans[k].overPre && !subPlans[k].overPos){ cutIdx = k; break; }
-    }
-    if (cutIdx >= 0) subPlans = subPlans.slice(0, cutIdx+1);
+    // Sempre mostra as 3 opções de prazo (30/60/90), mesmo quando um prazo
+    // mais curto já quita o saldo dentro dos limites — o corretor decide
+    // qual enviar para aprovação.
     var avaliacaoVistaBela = (empSlug === VISTA_BELA_SLUG) ? checkFinanciamentoVistaBela(unit, inputs) : null;
     return {
       unit: unit, mesesPre: meses,
@@ -1790,6 +1789,7 @@
         noteBox.innerHTML = '<div class="note-box">Selecione uma unidade disponível no passo 3 para continuar.</div>';
         document.getElementById('scenGrid').innerHTML = '';
         lastScenarios = null;
+        selectedScenarioTier = null;
         document.getElementById('resultsBlock').hidden = false;
         return;
       }
@@ -1801,6 +1801,7 @@
         noteBox.innerHTML = '<div class="note-box">Não há unidades disponíveis neste empreendimento no momento.</div>';
         document.getElementById('scenGrid').innerHTML = '';
         lastScenarios = null;
+        selectedScenarioTier = null;
         document.getElementById('resultsBlock').hidden = false;
         return;
       }
@@ -1816,9 +1817,18 @@
     });
 
     document.getElementById('resCountLabel').textContent = scenarios.length===1 ? 'Simulação' : (scenarios.length+' opções');
+    // Mantém a flag marcada se ela ainda corresponder a uma das opções desta
+    // geração (ex.: veio de uma ressimulação); senão, limpa — exceto quando
+    // só existe uma opção, que já vem marcada por padrão.
+    if (scenarios.length === 1){
+      selectedScenarioTier = scenarios[0].tier;
+    } else if (scenarios.map(function(s){return s.tier;}).indexOf(selectedScenarioTier) === -1){
+      selectedScenarioTier = null;
+    }
     var scenGridEl = document.getElementById('scenGrid');
-    scenGridEl.innerHTML = scenarios.map(function(s, sIdx){ return renderScenarioCard(s, {scenIdx: sIdx, showAjuste: true}); }).join('');
+    scenGridEl.innerHTML = scenarios.map(function(s, sIdx){ return renderScenarioCard(s, {scenIdx: sIdx, showAjuste: true, selectable: true, selectedTier: selectedScenarioTier}); }).join('');
     wireAjusteBlocks(scenGridEl, scenarios);
+    wireScenarioSelect(scenGridEl);
     document.getElementById('resultsBlock').hidden = false;
     document.getElementById('resultsBlock').scrollIntoView({behavior:'smooth', block:'nearest'});
 
@@ -1851,6 +1861,7 @@
     document.getElementById('scenGrid').innerHTML = '';
     document.getElementById('resultsNote').innerHTML = '';
     lastScenarios = null;
+    selectedScenarioTier = null;
     ressimulandoId = null;
   }
   document.getElementById('limparSimBtn').addEventListener('click', function(){
@@ -1913,6 +1924,7 @@
     document.getElementById('scenGrid').innerHTML = '';
     document.getElementById('resultsNote').innerHTML = '';
     lastScenarios = null;
+    selectedScenarioTier = s.selectedTier || null; // mantém a flag da rodada anterior como ponto de partida
 
     showToast('Ajuste os dados da nova negociação e clique em "Gerar simulação" de novo.');
     window.scrollTo({top:0, behavior:'smooth'});
@@ -2137,8 +2149,24 @@
     var vbAlertHtml = (s.avaliacaoVistaBela && s.avaliacaoVistaBela.excede)
       ? '<div class="scen-vb-alert">NECESSÁRIO REALIZAR A ALTERAÇÃO DO VALOR DE FINANCIAMENTO CONFORME O PERCENTUAL LIBERADO NA SIMULAÇÃO CAIXA</div>'
       : '';
-    return '<div class="scen-card tier-'+s.tier+'">'
-      + '<div class="scen-tag '+s.tier+'">'+esc(s.label)+'</div>'
+    // Flag "enviar para aprovação": marca qual das opções geradas é a que
+    // deve ir para aprovação ao salvar. Só aparece no Simulador ao vivo
+    // (opts.selectable). A opção marcada fica com um destaque colorido: azul
+    // enquanto não decidida, verde se aprovada, vermelho se recusada — tanto
+    // ao vivo quanto depois no Histórico/Planner (opts.selectedTier +
+    // opts.aprovStatus, vindos do que foi salvo).
+    var isSelected = !!(opts.selectedTier && opts.selectedTier === s.tier);
+    var highlightClass = '';
+    if (isSelected){
+      var stAprov = opts.aprovStatus || 'nao_enviado';
+      highlightClass = stAprov === 'aprovado' ? ' scen-card-sel-aprovado'
+        : (stAprov === 'recusado' ? ' scen-card-sel-recusado' : ' scen-card-sel-pendente');
+    }
+    var flagHtml = opts.selectable
+      ? '<label class="scen-flag" title="Marcar esta opção para enviar para aprovação"><input type="radio" class="scen-flag-input" name="scenFlagGroup" value="'+esc(s.tier)+'"'+(isSelected?' checked':'')+'><span>Enviar p/ aprovação</span></label>'
+      : '';
+    return '<div class="scen-card tier-'+s.tier+highlightClass+'">'
+      + '<div class="scen-tag '+s.tier+'"><span>'+esc(s.label)+'</span>'+flagHtml+'</div>'
       + '<div class="scen-body">'
       +   '<div><div class="scen-unit-code">'+esc(s.unit.code)+'</div><div class="scen-unit-loc">'+esc(s.unit.loc)+' · '+(s.unit.m2||'—')+' m²</div>'
       +   '<div class="scen-price">'+fmtMoney(s.unit.valor)+'</div></div>'
@@ -2252,6 +2280,25 @@
     });
   }
 
+  // Liga a flag "Enviar p/ aprovação" de cada card do Simulador ao vivo.
+  // Como os rádios compartilham o mesmo name, marcar um desmarca os outros
+  // automaticamente — só precisa atualizar a variável e o destaque azul no
+  // card certo, sem re-renderizar nada (preserva os blocos de prazo abertos).
+  function wireScenarioSelect(container){
+    container.querySelectorAll('.scen-flag-input').forEach(function(inp){
+      inp.addEventListener('change', function(){
+        selectedScenarioTier = inp.checked ? inp.value : null;
+        container.querySelectorAll('.scen-card').forEach(function(card){
+          card.classList.remove('scen-card-sel-pendente','scen-card-sel-aprovado','scen-card-sel-recusado');
+        });
+        if (selectedScenarioTier){
+          var selCard = container.querySelector('.scen-card.tier-'+selectedScenarioTier);
+          if (selCard) selCard.classList.add('scen-card-sel-pendente');
+        }
+      });
+    });
+  }
+
   document.getElementById('saveSimBtn').addEventListener('click', function(){
     if (!lastScenarios){ showToast('Gere uma simulação primeiro.'); return; }
     if (!db){ showToast('Sem conexão com os dados agora.'); return; }
@@ -2272,11 +2319,12 @@
       }
       var rodadaAnterior = {
         empSlug: atual.empSlug, empNome: atual.empNome, inputs: atual.inputs,
-        mesesPre: atual.mesesPre, scenarios: atual.scenarios,
+        mesesPre: atual.mesesPre, scenarios: atual.scenarios, selectedTier: atual.selectedTier || null,
         createdAt: atual.createdAt, createdBy: atual.createdBy
       };
       var rounds = (atual.rounds || []).concat([rodadaAnterior]);
       var patch = Object.assign({}, lastScenarios, {
+        selectedTier: selectedScenarioTier || null,
         rounds: rounds,
         createdAt: new Date().toISOString(),
         createdBy: CURRENT_USER || lastScenarios.inputs.corretor || "—"
@@ -2298,6 +2346,7 @@
 
     var id = genId();
     var payload = Object.assign({}, lastScenarios, {
+      selectedTier: selectedScenarioTier || null,
       createdAt: new Date().toISOString(),
       createdBy: CURRENT_USER || lastScenarios.inputs.corretor || "—",
       dealStatus: "Simulado"
@@ -2684,12 +2733,20 @@
       // rodadas anteriores arquivadas em s.rounds (ver saveSimBtn/ressimular).
       var rounds = (s.rounds||[]).concat([{
         empSlug: s.empSlug, empNome: s.empNome, inputs: s.inputs, mesesPre: s.mesesPre,
-        scenarios: s.scenarios, createdAt: s.createdAt, createdBy: s.createdBy
+        scenarios: s.scenarios, selectedTier: s.selectedTier, createdAt: s.createdAt, createdBy: s.createdBy
       }]);
       var multiRodada = rounds.length > 1;
       var roundsHtml = rounds.map(function(r, idx){
         var rendaDaRodada = r.inputs && r.inputs.renda > 0 ? r.inputs.renda : 0;
-        var scenariosHtml = (r.scenarios||[]).map(function(sc){ return renderScenarioCard(sc, {showLancamento:true, hasRenda: rendaDaRodada}); }).join('');
+        // O status de aprovação (azul/verde/vermelho) só vale pra rodada
+        // ATUAL (a última) — é ela que de fato foi/está sendo enviada para
+        // aprovação. Rodadas antigas, já substituídas por uma ressimulação,
+        // só mostram a flag em azul (neutro), sem herdar aprovado/recusado
+        // de uma decisão que é sobre a rodada nova.
+        var aprovStatusRodada = (idx === rounds.length-1) ? (s._statusAprovacao || 'nao_enviado') : 'nao_enviado';
+        var scenariosHtml = (r.scenarios||[]).map(function(sc){
+          return renderScenarioCard(sc, {showLancamento:true, hasRenda: rendaDaRodada, selectedTier: r.selectedTier, aprovStatus: aprovStatusRodada});
+        }).join('');
         var label = '';
         if (multiRodada){
           var rd = new Date(r.createdAt);

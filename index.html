@@ -2528,6 +2528,7 @@
     };
   }
   var catalogUploadParsed = null;
+  var catalogUploadErrors = {}; // slug -> mensagem de erro da última tentativa de gravação
   function renderCatalogUploadPreview(){
     var box = document.getElementById('catalogUploadPreview');
     var btn = document.getElementById('catalogUploadConfirm');
@@ -2535,6 +2536,7 @@
     var anyOk = false;
     var html = EMPREENDIMENTOS.map(function(e){
       var parsed = catalogUploadParsed[e.slug];
+      var erro = catalogUploadErrors[e.slug];
       if (!parsed){
         return '<div class="summary" style="margin-bottom:10px;"><div class="summary-row total"><span class="k">'+esc(e.nome)+'</span>'
           + '<span class="v" style="color:var(--danger)">aba não encontrada na planilha — mantido como está</span></div></div>';
@@ -2548,6 +2550,7 @@
         + '<div class="summary-row"><span class="k">Pró-soluto</span><span class="v">'+fmtDatePt(old.proSolutoDate)+' &rarr; <b>'+fmtDatePt(parsed.proSolutoDate)+'</b></span></div>'
         + '<div class="summary-row"><span class="k">Conclusão de obra</span><span class="v">'+fmtDatePt(old.conclusaoObraDate)+' &rarr; <b>'+fmtDatePt(parsed.conclusaoObraDate)+'</b></span></div>'
         + (semCriticos ? '<div class="summary-row"><span class="k">Atenção</span><span class="v" style="color:var(--danger)">'+semCriticos+' unidade(s) sem avaliação/valor na planilha</span></div>' : '')
+        + (erro ? '<div class="summary-row"><span class="k">Não salvou</span><span class="v" style="color:var(--danger)">'+esc(erro)+'</span></div>' : '')
         + '</div>';
     }).join('');
     box.innerHTML = html;
@@ -2555,6 +2558,7 @@
   }
   function openCatalogUploadModal(){
     catalogUploadParsed = null;
+    catalogUploadErrors = {};
     document.getElementById('catalogUploadPreview').innerHTML = '<p style="font-size:12.5px; color:var(--text-muted);">Selecione o arquivo .xlsx da planilha de vendas…</p>';
     document.getElementById('catalogUploadConfirm').disabled = true;
     document.getElementById('catalogUploadOverlay').hidden = false;
@@ -2578,6 +2582,7 @@
           if (p) parsed[slug] = p;
         });
         catalogUploadParsed = parsed;
+        catalogUploadErrors = {};
         renderCatalogUploadPreview();
       }catch(err){
         console.error(err);
@@ -2597,6 +2602,7 @@
     if (!slugs.length) return;
     var btn = this;
     btn.disabled = true;
+    catalogUploadErrors = {};
     var pendentes = slugs.length, falhas = 0;
     slugs.forEach(function(slug){
       var e = EMPREENDIMENTOS.filter(function(x){return x.slug===slug;})[0] || {};
@@ -2615,16 +2621,20 @@
       }).catch(function(err){
         console.error(err);
         falhas++;
+        catalogUploadErrors[slug] = (err && err.message) ? err.message : 'não foi possível salvar (erro desconhecido).';
         pendentes--;
         if (pendentes===0) finalizarUpload();
       });
     });
     function finalizarUpload(){
       btn.disabled = false;
-      showToast(falhas
-        ? ((slugs.length-falhas)+' de '+slugs.length+' empreendimento(s) atualizado(s); '+falhas+' falharam.')
-        : 'Catálogo de preços atualizado para todo mundo.');
-      closeCatalogUploadModal();
+      if (falhas){
+        showToast((slugs.length-falhas)+' de '+slugs.length+' empreendimento(s) atualizado(s); veja o(s) erro(s) abaixo.');
+        renderCatalogUploadPreview(); // mostra o motivo da falha em cada empreendimento que não salvou
+      } else {
+        showToast('Catálogo de preços atualizado para todo mundo.');
+        closeCatalogUploadModal();
+      }
     }
   });
   document.getElementById('importClose').addEventListener('click', closeImportModal);

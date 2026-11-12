@@ -1485,9 +1485,13 @@
     var atoDate = new Date(v.atoDate+'T00:00:00');
     if (isNaN(atoDate)) return null;
     var preDate = addMonthsOnDay(atoDate.getFullYear(), atoDate.getMonth(), v.preDia, 1);
+    // Se já existe unidade+prazo escolhidos para aprovação, usa a contagem
+    // de parcelas de pré EXATA dessa negociação (pode ter sido reduzida por
+    // causa do piso de parcela mínima); senão, cai no nº de meses de pré
+    // padrão do empreendimento (s.mesesPre), que toda simulação salva já tem.
     var escolha = getUnidadeEPrazoEscolhidos(s);
     var sp = escolha && escolha.subPlan;
-    var mesesPreReal = sp ? (sp.ajusteManual ? sp.ajusteManual.mesesPreNeg : sp.mesesPreEfetivo) : 1;
+    var mesesPreReal = sp ? (sp.ajusteManual ? sp.ajusteManual.mesesPreNeg : sp.mesesPreEfetivo) : (s.mesesPre || 1);
     if (!mesesPreReal) mesesPreReal = 1;
     var posDate = addMonthsOnDay(preDate.getFullYear(), preDate.getMonth(), v.preDia, mesesPreReal);
     var meta = empMeta(s.empSlug);
@@ -1500,8 +1504,7 @@
   }
 
   function renderVencimentosBlock(s){
-    var escolha = getUnidadeEPrazoEscolhidos(s);
-    if (!escolha) return '';
+    if (!s) return '';
     var v = s.vencimentos || {};
     var hoje = new Date(); hoje.setHours(0,0,0,0);
     var hojeIso = hoje.getFullYear()+'-'+String(hoje.getMonth()+1).padStart(2,'0')+'-'+String(hoje.getDate()).padStart(2,'0');

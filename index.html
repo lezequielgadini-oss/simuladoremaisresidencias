@@ -474,6 +474,9 @@
         <div class="field"><label>Entrada / ATO disponível</label><input type="number" id="sAto" min="0" step="50" value="0"></div>
         <div class="field"><label>Bônus / desconto negociado</label><input type="number" id="sDesconto" min="0" step="10" value="0"></div>
       </div>
+      <div class="grid3">
+        <div class="field"><label>Avaliação (CEF)</label><input type="number" id="sAvaliacao" min="0" step="100" value="0" title="Opcional — só é usado pra calcular o Bônus total (avaliação menos valor de venda), que aparece no histórico depois de salvar."></div>
+      </div>
     </div>
 
     <div class="step-card">
@@ -1750,7 +1753,13 @@
       ato: inputs.ato,
       jurosAM: inputs.jurosAM,
       subPlans: subPlans,
-      avaliacaoVistaBela: avaliacaoVistaBela
+      avaliacaoVistaBela: avaliacaoVistaBela,
+      // Bônus total (pra lançamento no sistema, só aparece no histórico — ver
+      // renderScenarioCard): avaliação do CEF menos o valor de venda desta
+      // unidade. Não tem célula obrigatória pra avaliação (o campo é
+      // opcional no passo 1), então sem ela o bônus fica zero e a linha nem
+      // aparece.
+      bonus: Math.max(0, (inputs.avaliacao||0) - unit.valor)
     };
   }
 
@@ -1762,6 +1771,7 @@
       financiamentoCef: parseFloat(document.getElementById('sFinCef').value)||0,
       parcelaCefValor: parseFloat(document.getElementById('sParcCef').value)||0,
       subsidio: parseFloat(document.getElementById('sSubsidio').value)||0,
+      avaliacao: parseFloat(document.getElementById('sAvaliacao').value)||0,
       fgts: parseFloat(document.getElementById('sFgts').value)||0,
       ato: parseFloat(document.getElementById('sAto').value)||0,
       desconto: parseFloat(document.getElementById('sDesconto').value)||0,
@@ -1854,6 +1864,7 @@
     document.getElementById('sFinCef').value = '0';
     document.getElementById('sParcCef').value = '0';
     document.getElementById('sSubsidio').value = '0';
+    document.getElementById('sAvaliacao').value = '0';
     document.getElementById('sFgts').value = '0';
     document.getElementById('sAto').value = '0';
     document.getElementById('sDesconto').value = '0';
@@ -1897,6 +1908,7 @@
     document.getElementById('sFinCef').value = inp.financiamentoCef || 0;
     document.getElementById('sParcCef').value = inp.parcelaCefValor || 0;
     document.getElementById('sSubsidio').value = inp.subsidio || 0;
+    document.getElementById('sAvaliacao').value = inp.avaliacao || 0;
     document.getElementById('sFgts').value = inp.fgts || 0;
     document.getElementById('sAto').value = inp.ato || 0;
     document.getElementById('sDesconto').value = inp.desconto || 0;
@@ -2169,6 +2181,13 @@
     var vbAlertHtml = (s.avaliacaoVistaBela && s.avaliacaoVistaBela.excede)
       ? '<div class="scen-vb-alert">NECESSÁRIO REALIZAR A ALTERAÇÃO DO VALOR DE FINANCIAMENTO CONFORME O PERCENTUAL LIBERADO NA SIMULAÇÃO CAIXA</div>'
       : '';
+    // Bônus total (avaliação CEF − valor de venda): só aparece no Histórico/
+    // Planner (opts.showLancamento), nunca no Simulador ao vivo — pedido
+    // explícito do usuário. Não varia por prazo, então entra uma vez só por
+    // card, igual à parcela pós CEF.
+    var bonusHtml = (opts.showLancamento && s.bonus > 0)
+      ? '<div class="scen-plan lancamento"><div class="lancamento-title">Bônus total <span>(avaliação − valor de venda)</span></div><div class="scen-plan-row"><span class="k">Bônus</span><span class="v">'+fmtMoney(s.bonus)+'</span></div></div>'
+      : '';
     // Flag "enviar para aprovação": marca qual das opções geradas é a que
     // deve ir para aprovação ao salvar. Só aparece no Simulador ao vivo
     // (opts.selectable). A opção marcada fica com um destaque colorido: azul
@@ -2206,6 +2225,7 @@
       +   '<div class="scen-attrs">'+attrChips(s.unit)+'</div>'
       +   vbAlertHtml
       +   parcelaCefHtml
+      +   bonusHtml
       +   '<div class="subplan-grid">'+subHtml+'</div>'
       + '</div></div>';
   }

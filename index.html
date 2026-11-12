@@ -257,6 +257,11 @@
   .scen-vb-alert{background:var(--danger); color:#fff; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.03em; text-align:center; border-radius:7px; padding:8px 10px; line-height:1.4;}
   .subplan-reducao{margin:0 0 9px; background:var(--st-vnd-soft); color:var(--st-vnd); font-weight:600; font-size:11px; border-radius:8px; padding:7px 10px; line-height:1.4;}
   .lancamento{margin-top:9px; padding-top:9px; border-top:1px dashed var(--border-soft);}
+  /* Bloco "valores para lançar no sistema", só depois de aprovado — fundo
+     verde suave pra destacar que é o bloco final/oficial (nomenclatura do
+     fluxo em Excel), diferente do bloco cinza "Lançamento da venda" comum. */
+  .lancamento-sistema{margin-top:9px; padding:9px 10px; border-radius:8px; background:var(--st-vnd-soft, rgba(60,160,100,.12)); border:1px dashed var(--st-vnd);}
+  .lancamento-sistema .lancamento-title{color:var(--st-vnd);}
   .lancamento-title{font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-faint); margin-bottom:4px;}
   .lancamento-title span{font-weight:500; text-transform:none; letter-spacing:0;}
   .subplan-alt{margin-top:9px; padding:0 10px 0; border:1px dashed var(--gold); border-radius:8px; background:var(--gold-soft);}
@@ -2032,7 +2037,44 @@
     };
   }
 
-  function renderSubPlan(sp, s, hasRenda, showLancamento, ajusteCtx){
+  // Bloco "valores para lançar no sistema" — só aparece depois que o
+  // Coordenador aprova a venda (status_aprovacao = aprovado), na unidade e
+  // no prazo que de fato foram escolhidos (s.selectedTier/s.selectedTerm).
+  // Usa a MESMA nomenclatura da coluna O (linhas 19 a 35) do fluxo em Excel
+  // original — ATO, MENSAIS PRÉ, MENSAIS PÓS, FINANCIAMENTO, SUBSÍDIO,
+  // FGTS, BÔNUS — pra bater certinho com os campos do sistema de vendas.
+  // Todos os valores aqui são SEM JUROS (o principal dividido em partes
+  // iguais, igual ao bloco "Lançamento da venda" normal), nunca o valor com
+  // a curva de juros cobrada do cliente. O BÔNUS aqui soma o bônus por
+  // avaliação (s.bonus) com o desconto do prazo (sp.descontoTotal) — é
+  // assim que o fluxo original soma as duas coisas numa linha só (célula
+  // O33 = M33+M35) pra lançar como um valor único no sistema.
+  function renderLancamentoAprovadoBlock(sp, s){
+    var eff = effectiveSubPlan(sp, s);
+    var manual = !!sp.ajusteManual;
+    var am = sp.ajusteManual;
+    var mesesPreLanc = manual ? am.mesesPreNeg : sp.mesesPreEfetivo;
+    var parcelaPreSemJurosLanc = manual ? am.parcelaPreSemJurosNeg : sp.parcelaPreSemJuros;
+    var mesesPosLanc = eff.mesesPos;
+    var parcelaPosSemJurosLanc = manual ? am.parcelaPosSemJurosNeg : sp.parcelaPosSemJuros;
+    var financiamentoLanc = sp.financiamentoAjustado;
+    var bonusLanc = (s.bonus||0) + (sp.descontoTotal||0);
+    var rows = [];
+    if (eff.ato>0) rows.push(['ATO', eff.ato]);
+    if (eff.valorCobertoPelaPre>0) rows.push(['MENSAIS PRÉ ('+mesesPreLanc+'x)', parcelaPreSemJurosLanc]);
+    if (eff.saldoResidual>0) rows.push(['MENSAIS PÓS ('+mesesPosLanc+'x)', parcelaPosSemJurosLanc]);
+    if (financiamentoLanc>0) rows.push(['FINANCIAMENTO', financiamentoLanc]);
+    if (s.subsidio>0) rows.push(['SUBSÍDIO', s.subsidio]);
+    if (s.fgts>0) rows.push(['FGTS', s.fgts]);
+    if (bonusLanc>0) rows.push(['BÔNUS', bonusLanc]);
+    if (!rows.length) return '';
+    return '<div class="scen-plan lancamento-sistema">'
+      + '<div class="lancamento-title">Valores para lançar no sistema <span>(aprovado — sem juros)</span></div>'
+      + rows.map(function(r){ return '<div class="scen-plan-row"><span class="k">'+r[0]+'</span><span class="v">'+fmtMoney(r[1])+'</span></div>'; }).join('')
+      + '</div>';
+  }
+
+  function renderSubPlan(sp, s, hasRenda, showLancamento, ajusteCtx, showLancSistema){
     var mesesPre = s.mesesPre;
     var eff = effectiveSubPlan(sp, s);
     var warn = eff.overPre || eff.overPos;
@@ -2132,6 +2174,7 @@
     var isChosenTerm = s.selectedTerm != null && s.selectedTerm === sp.T;
     var hasChosenTerm = s.selectedTerm != null;
     var openAttr = (!hasChosenTerm || isChosenTerm) ? ' open' : '';
+    var lancamentoSistemaHtml = (showLancSistema && isChosenTerm) ? renderLancamentoAprovadoBlock(sp, s) : '';
     return '<details class="subplan'+(warn?' subplan-warn':'')+(isChosenTerm?' subplan-chosen':'')+'"'+openAttr+(editable?' data-scen="'+ajusteCtx.scenIdx+'" data-sp="'+ajusteCtx.spIdx+'"':'')+'>'
       + '<summary class="subplan-head"><span>Prazo total '+sp.T+'x</span><span class="subplan-split">'+mesesPreReal+' pré + '+eff.mesesPos+' pós</span></summary>'
       + subtracaoHtml
@@ -2150,6 +2193,7 @@
       + (eff.needsAvalista ? '<div class="subplan-avalista">É NECESSÁRIO AVALISTA</div>' : '')
       + lancamentoHtml
       + ajusteSalvoHtml
+      + lancamentoSistemaHtml
       + (eff.manual ? '' : altHtml)
       + ajusteToolbarHtml
       + '</details>';
@@ -2166,6 +2210,12 @@
      * campo "Renda" vazio da própria tela dele e todo comprometimento
      * aparecia como "—", mesmo quando o corretor tinha informado a renda. */
     var hasRenda = (opts.hasRenda !== undefined) ? opts.hasRenda : document.getElementById('sRenda').value;
+    // Precisa saber se ESTE card é o escolhido (opts.selectedTier) antes de
+    // montar os prazos, porque o bloco "valores para lançar no sistema" só
+    // aparece no prazo escolhido da unidade escolhida, e só depois que o
+    // Coordenador aprova (opts.aprovStatus).
+    var isSelectedForLanc = !!(opts.selectedTier && opts.selectedTier === s.tier);
+    var showLancSistema = !!(opts.showLancamento && opts.aprovStatus === 'aprovado' && isSelectedForLanc);
     // Financiamento, subsídio, FGTS, entrada e desconto agora entram na
     // operação de subtração dentro de cada prazo (o desconto muda por
     // prazo). A parcela pós do banco (CEF) não faz parte dessa conta — é um
@@ -2173,7 +2223,7 @@
     // aqui, uma vez só, fora da subtração.
     var subHtml = s.subPlans.map(function(sp, spIdx){
       var ajusteCtx = (opts.showAjuste && opts.scenIdx!=null) ? {scenIdx: opts.scenIdx, spIdx: spIdx} : null;
-      return renderSubPlan(sp, s, hasRenda, opts.showLancamento, ajusteCtx);
+      return renderSubPlan(sp, s, hasRenda, opts.showLancamento, ajusteCtx, showLancSistema);
     }).join('');
     var parcelaCefHtml = s.parcelaCefValor>0
       ? '<div class="scen-plan-row"><span class="k">Parcela pós banco (CEF)</span><span class="v">'+fmtMoney(s.parcelaCefValor)+'</span></div>'
@@ -2194,7 +2244,7 @@
     // enquanto não decidida, verde se aprovada, vermelho se recusada — tanto
     // ao vivo quanto depois no Histórico/Planner (opts.selectedTier +
     // opts.aprovStatus, vindos do que foi salvo).
-    var isSelected = !!(opts.selectedTier && opts.selectedTier === s.tier);
+    var isSelected = isSelectedForLanc;
     var highlightClass = '';
     if (isSelected){
       var stAprov = opts.aprovStatus || 'nao_enviado';

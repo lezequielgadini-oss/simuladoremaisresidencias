@@ -376,6 +376,18 @@
   .aprov-block{margin-top:6px; display:flex; flex-direction:column; gap:6px;}
   .aprov-coord-box{display:flex; flex-direction:column; gap:6px; background:var(--surface-alt); border-radius:8px; padding:8px; margin-top:4px;}
   .aprov-obs{width:100%; min-height:40px; border:1px solid var(--border-soft); border-radius:7px; padding:6px 8px; background:var(--bg); color:var(--text); font-size:11.5px; font-family:inherit; resize:vertical; box-sizing:border-box;}
+  .venc-block{margin-top:8px; padding:9px 10px; border-radius:8px; background:var(--surface-alt); border:1px solid var(--border-soft);}
+  .venc-title{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); margin-bottom:7px;}
+  .venc-inputs{display:flex; gap:10px; flex-wrap:wrap;}
+  .venc-inputs label{display:flex; flex-direction:column; gap:3px; font-size:10px; color:var(--text-faint); flex:1; min-width:140px;}
+  .venc-inputs input, .venc-inputs select{border:1px solid var(--border-soft); border-radius:6px; padding:5px 7px; background:var(--bg); color:var(--text); font-family:inherit; font-size:12px; box-sizing:border-box;}
+  .venc-inputs input:focus, .venc-inputs select:focus{outline:none; border-color:var(--accent);}
+  .venc-resumo{margin-top:8px; display:flex; flex-direction:column; gap:3px;}
+  .venc-resumo-row{display:flex; justify-content:space-between; gap:10px; font-size:11.5px;}
+  .venc-resumo-row .k{color:var(--text-muted);}
+  .venc-resumo-row .v{font-weight:600; font-family:'IBM Plex Mono',monospace;}
+  .venc-resumo-hint{margin-top:7px; font-size:11px; color:var(--text-faint); font-style:italic;}
+  .venc-aviso{margin-top:8px; background:rgba(194,52,52,.12); color:var(--danger); font-weight:700; font-size:11.5px; border-radius:7px; padding:8px 10px; line-height:1.4;}
   .planner-card .pc-notas:focus{outline:none; border-color:var(--accent);}
 
   .status-edit-row{display:flex; align-items:center; gap:8px; padding:6px 0;}
@@ -1425,6 +1437,131 @@
     var d = new Date(iso+'T00:00:00');
     if (isNaN(d)) return iso;
     return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'});
+  }
+
+  function fmtDateObj(d){
+    if (!d || isNaN(d)) return '—';
+    return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'});
+  }
+
+  /* ============ datas de vencimento (séries de pagamento) ============
+     Replica a lógica de datas da planilha-base (aba APARTAMENTOS, colunas
+     I/J): o corretor escolhe a data do ATO e o dia-padrão da PRÉ; todas as
+     demais datas são derivadas automaticamente. */
+  var PRE_DIAS_PADRAO = [6, 12, 17, 22];
+
+  // Soma "mesesToAdd" meses a partir de baseYear/baseMonthIdx0, fixando o
+  // dia em "day" (sempre um dos dias padrão, <=28, então nunca há overflow
+  // de fim de mês).
+  function addMonthsOnDay(baseYear, baseMonthIdx0, day, mesesToAdd){
+    var total = baseMonthIdx0 + mesesToAdd;
+    var y = baseYear + Math.floor(total/12);
+    var m = ((total%12)+12)%12;
+    return new Date(y, m, day);
+  }
+
+  // Localiza o cenário (unidade) e o subplano (prazo) que foram escolhidos
+  // para aprovação nesta simulação, para saber quantas parcelas de PRÉ essa
+  // negociação específica tem.
+  function getUnidadeEPrazoEscolhidos(s){
+    if (!s || !s.selectedTier) return null;
+    var sc = (s.scenarios||[]).filter(function(x){ return x.tier === s.selectedTier; })[0];
+    if (!sc || sc.selectedTerm == null) return null;
+    var sp = (sc.subPlans||[]).filter(function(x){ return x.T === sc.selectedTerm; })[0];
+    if (!sp) return null;
+    return {scenario: sc, subPlan: sp};
+  }
+
+  function vencimentosCompletas(s){
+    return !!(s && s.vencimentos && s.vencimentos.atoDate && s.vencimentos.preDia);
+  }
+
+  // Calcula as datas de vencimento de cada série, a partir da data do ATO +
+  // o dia-padrão da PRÉ escolhidos pelo corretor, mais os dados da
+  // unidade/prazo escolhidos e a Conclusão de Obra do empreendimento.
+  function computeVencimentos(s){
+    if (!vencimentosCompletas(s)) return null;
+    var v = s.vencimentos;
+    var atoDate = new Date(v.atoDate+'T00:00:00');
+    if (isNaN(atoDate)) return null;
+    var preDate = addMonthsOnDay(atoDate.getFullYear(), atoDate.getMonth(), v.preDia, 1);
+    var escolha = getUnidadeEPrazoEscolhidos(s);
+    var sp = escolha && escolha.subPlan;
+    var mesesPreReal = sp ? (sp.ajusteManual ? sp.ajusteManual.mesesPreNeg : sp.mesesPreEfetivo) : 1;
+    if (!mesesPreReal) mesesPreReal = 1;
+    var posDate = addMonthsOnDay(preDate.getFullYear(), preDate.getMonth(), v.preDia, mesesPreReal);
+    var meta = empMeta(s.empSlug);
+    var outrasDate = null;
+    if (meta && meta.conclusaoObraDate){
+      var co = new Date(meta.conclusaoObraDate+'T00:00:00');
+      if (!isNaN(co)) outrasDate = new Date(co.getFullYear(), co.getMonth(), v.preDia);
+    }
+    return {ato: atoDate, pre: preDate, pos: posDate, outras: outrasDate};
+  }
+
+  function renderVencimentosBlock(s){
+    var escolha = getUnidadeEPrazoEscolhidos(s);
+    if (!escolha) return '';
+    var v = s.vencimentos || {};
+    var hoje = new Date(); hoje.setHours(0,0,0,0);
+    var hojeIso = hoje.getFullYear()+'-'+String(hoje.getMonth()+1).padStart(2,'0')+'-'+String(hoje.getDate()).padStart(2,'0');
+    var datas = computeVencimentos(s);
+    var diaOptsHtml = '<option value="">Dia —</option>' + PRE_DIAS_PADRAO.map(function(d){
+      return '<option value="'+d+'"'+(v.preDia===d?' selected':'')+'>'+d+'</option>';
+    }).join('');
+    var resumoHtml = datas
+      ? '<div class="venc-resumo">'
+        + '<div class="venc-resumo-row"><span class="k">1ª parcela PRÉ</span><span class="v">'+fmtDateObj(datas.pre)+'</span></div>'
+        + '<div class="venc-resumo-row"><span class="k">1ª parcela PÓS</span><span class="v">'+fmtDateObj(datas.pos)+'</span></div>'
+        + (datas.outras ? '<div class="venc-resumo-row"><span class="k">Financiamento / Subsídio / FGTS / Bônus / Desconto</span><span class="v">'+fmtDateObj(datas.outras)+'</span></div>' : '')
+        + '</div>'
+      : '<div class="venc-resumo-hint">Preencha a data do ATO e o dia da PRÉ para calcular as demais datas.</div>';
+    return '<div class="venc-block" data-id="'+esc(s.id)+'">'
+      + '<div class="venc-title">Datas de vencimento</div>'
+      + '<div class="venc-inputs">'
+      +   '<label>Vencimento do ATO<input type="date" class="venc-ato" min="'+hojeIso+'" value="'+esc(v.atoDate||'')+'"></label>'
+      +   '<label>Dia padrão da PRÉ<select class="venc-pre-dia">'+diaOptsHtml+'</select></label>'
+      + '</div>'
+      + resumoHtml
+      + '<div class="venc-aviso" hidden>Preencha as datas de vencimento.</div>'
+      + '</div>';
+  }
+
+  function saveVencimentos(id, vencimentos){
+    if (!db) return;
+    db.collection('simulacoes').doc(id).update({vencimentos: vencimentos})
+      .catch(function(e){ console.error(e); showToast('Não foi possível salvar as datas de vencimento.'); });
+  }
+
+  function wireOneVencimentosBlock(block){
+    if (!block) return;
+    var id = block.getAttribute('data-id');
+    var s = SIMULACOES.filter(function(x){ return x.id === id; })[0];
+    if (!s) return;
+    var atoInp = block.querySelector('.venc-ato');
+    var diaSel = block.querySelector('.venc-pre-dia');
+    function save(){
+      var v = {
+        atoDate: atoInp.value || null,
+        preDia: diaSel.value ? parseInt(diaSel.value, 10) : null
+      };
+      s.vencimentos = v;
+      saveVencimentos(id, v);
+      var fresh = renderVencimentosBlock(s);
+      if (!fresh) return;
+      var wrap = document.createElement('div'); wrap.innerHTML = fresh;
+      var newBlock = wrap.firstElementChild;
+      block.replaceWith(newBlock);
+      wireOneVencimentosBlock(newBlock);
+    }
+    if (atoInp) atoInp.addEventListener('change', save);
+    if (diaSel) diaSel.addEventListener('change', save);
+  }
+
+  function wireVencimentosBlocks(container){
+    container.querySelectorAll('.venc-block').forEach(function(block){
+      wireOneVencimentosBlock(block);
+    });
   }
 
   /* ================= main tabs ================= */
@@ -2925,6 +3062,7 @@
       var aprovPill = renderAprovacaoBadge(s);
       var roundsPill = multiRodada ? '<span class="hist-rounds-pill">'+rounds.length+' rodadas</span>' : '';
       var aprovBlock = '<div class="aprov-block" data-id="'+esc(s.id)+'">'+renderAprovacaoActions(s)+'</div>';
+      var vencBlock = renderVencimentosBlock(s);
       return '<div class="hist-item">'
         + '<div class="hist-head" data-id="'+esc(s.id)+'">'
         +   '<div><div class="hist-who">'+esc(s.inputs&&s.inputs.cliente || 'Cliente não informado')+' &middot; '+esc(s.empNome)+' '+dealPill+aprovPill+roundsPill+'</div>'
@@ -2937,11 +3075,13 @@
         +     '<span class="hist-toggle">'+(isOpen?'recolher ▲':'ver simulação ▼')+'</span>'
         +   '</div>'
         + '</div>'
+        + vencBlock
         + aprovBlock
         + '<div class="hist-body'+(isOpen?' open':'')+'">'+roundsHtml+'</div>'
         + '</div>';
     }).join('');
     wireAprovacaoBlocks(list);
+    wireVencimentosBlocks(list);
     list.querySelectorAll('.hist-head').forEach(function(h){
       h.addEventListener('click', function(e){
         if (e.target.closest('.hist-ressim-btn')) return;
@@ -3059,7 +3199,19 @@
   }
   function wireAprovacaoBlocks(container){
     container.querySelectorAll('.aprov-enviar-btn').forEach(function(btn){
-      btn.addEventListener('click', function(e){ e.stopPropagation(); enviarParaAprovacao(btn.getAttribute('data-id')); });
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        var id = btn.getAttribute('data-id');
+        var s = SIMULACOES.filter(function(x){ return x.id === id; })[0];
+        if (s && !vencimentosCompletas(s)){
+          var wrap = btn.closest('.hist-item') || btn.closest('.planner-card') || btn.closest('.aprov-block');
+          var aviso = wrap && wrap.querySelector('.venc-aviso');
+          if (aviso){ aviso.hidden = false; aviso.scrollIntoView({behavior:'smooth', block:'nearest'}); }
+          else { showToast('Preencha as datas de vencimento antes de enviar para aprovação.'); }
+          return;
+        }
+        enviarParaAprovacao(id);
+      });
       btn.addEventListener('dragstart', function(e){ e.preventDefault(); e.stopPropagation(); });
     });
     container.querySelectorAll('.aprov-aprovar-btn').forEach(function(btn){

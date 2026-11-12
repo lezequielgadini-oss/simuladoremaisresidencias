@@ -333,6 +333,15 @@
   .hist-round{margin-bottom:14px;}
   .hist-round:last-child{margin-bottom:0;}
   .hist-round-label{font-size:11px; font-weight:700; color:var(--accent-dark); text-transform:uppercase; letter-spacing:.03em; margin:0 0 8px; padding-bottom:6px; border-bottom:1px solid var(--border-soft);}
+  /* Rodada atual (a última negociação, a que de fato vai pro Coordenador
+     aprovar) fica em destaque — fundo e barra lateral na cor de destaque.
+     Rodadas antigas (ver .hist-round-old) ficam recolhidas, só de consulta. */
+  .hist-round-atual{background:var(--accent-soft); border-left:3px solid var(--accent-dark); border-radius:0 10px 10px 0; padding:10px 10px 10px 13px;}
+  .hist-round-label-atual{display:flex; flex-direction:column; gap:2px; border-bottom:none; padding-bottom:0; margin-bottom:10px;}
+  .hist-round-label-atual span{font-weight:500; text-transform:none; letter-spacing:0; color:var(--text-muted); font-size:10.5px;}
+  .hist-round-old summary{cursor:pointer; list-style:none;}
+  .hist-round-old summary::-webkit-details-marker{display:none;}
+  .hist-round-old summary span{font-weight:500; text-transform:none; letter-spacing:0; color:var(--accent-dark);}
 
   /* ---------- planner (kanban) ---------- */
   .planner-board{display:flex; gap:14px; overflow-x:auto; padding-bottom:8px; align-items:flex-start;}
@@ -2881,22 +2890,34 @@
       }]);
       var multiRodada = rounds.length > 1;
       var roundsHtml = rounds.map(function(r, idx){
+        var isCurrentRound = idx === rounds.length-1;
         var rendaDaRodada = r.inputs && r.inputs.renda > 0 ? r.inputs.renda : 0;
         // O status de aprovação (azul/verde/vermelho) só vale pra rodada
         // ATUAL (a última) — é ela que de fato foi/está sendo enviada para
         // aprovação. Rodadas antigas, já substituídas por uma ressimulação,
         // só mostram a flag em azul (neutro), sem herdar aprovado/recusado
         // de uma decisão que é sobre a rodada nova.
-        var aprovStatusRodada = (idx === rounds.length-1) ? (s._statusAprovacao || 'nao_enviado') : 'nao_enviado';
+        var aprovStatusRodada = isCurrentRound ? (s._statusAprovacao || 'nao_enviado') : 'nao_enviado';
         var scenariosHtml = (r.scenarios||[]).map(function(sc){
           return renderScenarioCard(sc, {showLancamento:true, hasRenda: rendaDaRodada, selectedTier: r.selectedTier, aprovStatus: aprovStatusRodada});
         }).join('');
-        var label = '';
-        if (multiRodada){
-          var rd = new Date(r.createdAt);
-          label = '<div class="hist-round-label">Rodada '+(idx+1)+' &middot; '+esc(r.createdBy)+' &middot; '+rd.toLocaleDateString('pt-BR')+' '+rd.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</div>';
+        var rd = new Date(r.createdAt);
+        var quando = rd.toLocaleDateString('pt-BR')+' '+rd.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+        // Rodada atual (a última) fica sempre visível e em destaque — é ela
+        // que de fato vai (ou já foi) pro Coordenador aprovar, nunca uma
+        // rodada antiga. Rodadas antigas só servem de consulta (o que já foi
+        // negociado antes da ressimulação), por isso ficam recolhidas por
+        // padrão num <details> — quem quiser conferir, expande clicando.
+        if (isCurrentRound){
+          var labelAtual = multiRodada
+            ? '<div class="hist-round-label hist-round-label-atual">Rodada '+(idx+1)+' &middot; atual — é esta que será aprovada <span>'+esc(r.createdBy)+' &middot; '+quando+'</span></div>'
+            : '';
+          return '<div class="hist-round hist-round-atual">'+labelAtual+'<div class="scen-grid">'+scenariosHtml+'</div></div>';
         }
-        return '<div class="hist-round">'+label+'<div class="scen-grid">'+scenariosHtml+'</div></div>';
+        return '<details class="hist-round hist-round-old">'
+          + '<summary class="hist-round-label">Rodada '+(idx+1)+' &middot; '+esc(r.createdBy)+' &middot; '+quando+' <span>(ver)</span></summary>'
+          + '<div class="scen-grid">'+scenariosHtml+'</div>'
+          + '</details>';
       }).join('');
       var imobLine = (s.inputs && s.inputs.isImobiliaria)
         ? '<div class="hist-meta">Venda via imobiliária: <b>'+esc(s.inputs.imobiliariaNome||'—')+'</b></div>' : '';

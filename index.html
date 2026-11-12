@@ -183,8 +183,14 @@
 
   .scen-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
   .scen-card{background:var(--surface); border:1.5px solid var(--border-soft); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column;}
-  .scen-card.tier-premium{border-color:var(--gold);}
-  .scen-tag{padding:10px 16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#fff; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  /* Borda colorida padronizada: toda opção (não só Garden/Premium) fica
+     contornada com a cor do seu próprio tipo, igual ao fundo da faixa do
+     topo (.scen-tag), pra ficar visualmente consistente entre as 3 opções. */
+  .scen-card.tier-premium, .scen-card.tier-garden{border-color:var(--gold);}
+  .scen-card.tier-economica, .scen-card.tier-semSacada{border-color:var(--st-vnd);}
+  .scen-card.tier-intermediaria, .scen-card.tier-comSacada{border-color:var(--accent);}
+  .scen-card.tier-escolhida{border-color:var(--accent-dark);}
+  .scen-tag{padding:10px 16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#fff; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;}
   .scen-tag.economica{background:var(--st-vnd);}
   .scen-tag.intermediaria{background:var(--accent);}
   .scen-tag.premium{background:var(--gold); color:var(--gold-contrast);}
@@ -192,12 +198,15 @@
   .scen-tag.semSacada{background:var(--st-vnd);}
   .scen-tag.comSacada{background:var(--accent);}
   .scen-tag.garden{background:var(--gold); color:var(--gold-contrast);}
-  .scen-card.tier-garden{border-color:var(--gold);}
+  .scen-tag-actions{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .scen-flag{display:flex; align-items:center; gap:5px; font-size:10px; font-weight:600; text-transform:none; letter-spacing:0; cursor:pointer; white-space:nowrap; color:inherit;}
   .scen-flag input{margin:0; width:14px; height:14px; cursor:pointer; accent-color:#fff;}
+  .scen-term-select{font-size:10px; font-weight:600; border:1px solid rgba(255,255,255,.65); border-radius:5px; background:rgba(255,255,255,.18); color:#fff; padding:2px 4px; cursor:pointer;}
+  .scen-term-select option{color:#141413;}
   .scen-card-sel-pendente{box-shadow:0 0 0 3px var(--st-res) inset, var(--shadow);}
   .scen-card-sel-aprovado{box-shadow:0 0 0 3px var(--st-vnd) inset, var(--shadow);}
   .scen-card-sel-recusado{box-shadow:0 0 0 3px var(--danger) inset, var(--shadow);}
+  .subplan-chosen{background:var(--st-res-soft);}
   .scen-body{padding:16px 18px; flex:1; display:flex; flex-direction:column; gap:12px;}
   .scen-unit-code{font-size:16px; font-weight:800; font-family:'Archivo',sans-serif;}
   .scen-unit-loc{font-size:11.5px; color:var(--text-muted);}
@@ -1829,6 +1838,7 @@
     scenGridEl.innerHTML = scenarios.map(function(s, sIdx){ return renderScenarioCard(s, {scenIdx: sIdx, showAjuste: true, selectable: true, selectedTier: selectedScenarioTier}); }).join('');
     wireAjusteBlocks(scenGridEl, scenarios);
     wireScenarioSelect(scenGridEl);
+    wireTermSelect(scenGridEl, scenarios);
     document.getElementById('resultsBlock').hidden = false;
     document.getElementById('resultsBlock').scrollIntoView({behavior:'smooth', block:'nearest'});
 
@@ -2100,7 +2110,17 @@
     // interessam na hora de um print pro cliente/imobiliária. Quando
     // editável, carrega data-scen/data-sp pra localizar o subplano certo
     // depois de inserido no DOM (wireAjusteBlocks/wireOneAjusteBlock).
-    return '<details class="subplan'+(warn?' subplan-warn':'')+'" open'+(editable?' data-scen="'+ajusteCtx.scenIdx+'" data-sp="'+ajusteCtx.spIdx+'"':'')+'>'
+    //
+    // Quando o corretor marca (no filtro ao lado do tipo de unidade, ver
+    // renderScenarioCard) qual parcelamento foi o escolhido (s.selectedTerm),
+    // esse prazo fica em destaque (fundo azul claro) e os outros prazos da
+    // mesma unidade ficam recolhidos por padrão — quem quiser ver, expande
+    // clicando. Sem nenhum prazo escolhido ainda, todos ficam abertos, como
+    // sempre foi.
+    var isChosenTerm = s.selectedTerm != null && s.selectedTerm === sp.T;
+    var hasChosenTerm = s.selectedTerm != null;
+    var openAttr = (!hasChosenTerm || isChosenTerm) ? ' open' : '';
+    return '<details class="subplan'+(warn?' subplan-warn':'')+(isChosenTerm?' subplan-chosen':'')+'"'+openAttr+(editable?' data-scen="'+ajusteCtx.scenIdx+'" data-sp="'+ajusteCtx.spIdx+'"':'')+'>'
       + '<summary class="subplan-head"><span>Prazo total '+sp.T+'x</span><span class="subplan-split">'+mesesPreReal+' pré + '+eff.mesesPos+' pós</span></summary>'
       + subtracaoHtml
       + reducaoHtml
@@ -2165,8 +2185,21 @@
     var flagHtml = opts.selectable
       ? '<label class="scen-flag" title="Marcar esta opção para enviar para aprovação"><input type="radio" class="scen-flag-input" name="scenFlagGroup" value="'+esc(s.tier)+'"'+(isSelected?' checked':'')+'><span>Enviar p/ aprovação</span></label>'
       : '';
-    return '<div class="scen-card tier-'+s.tier+highlightClass+'">'
-      + '<div class="scen-tag '+s.tier+'"><span>'+esc(s.label)+'</span>'+flagHtml+'</div>'
+    // Filtro "ao lado" do tipo de unidade, pra marcar qual parcelamento (dos
+    // prazos gerados) foi o escolhido — ver renderSubPlan pro destaque/
+    // recolhimento que isso aciona. Só aparece no Simulador ao vivo; no
+    // Histórico/Planner o destaque já salvo (s.selectedTerm) aparece sozinho,
+    // sem o seletor (não dá pra editar simulação já salva por ali).
+    var termSelectHtml = opts.selectable
+      ? '<select class="scen-term-select" title="Marcar qual parcelamento foi escolhido"><option value="">Prazo: —</option>'
+        + s.subPlans.map(function(sp){
+            return '<option value="'+sp.T+'"'+(s.selectedTerm===sp.T?' selected':'')+'>'+sp.T+'x</option>';
+          }).join('')
+        + '</select>'
+      : '';
+    var scenIdxAttr = (opts.scenIdx!=null) ? ' data-scen-idx="'+opts.scenIdx+'"' : '';
+    return '<div class="scen-card tier-'+s.tier+highlightClass+'"'+scenIdxAttr+'>'
+      + '<div class="scen-tag '+s.tier+'"><span>'+esc(s.label)+'</span><div class="scen-tag-actions">'+termSelectHtml+flagHtml+'</div></div>'
       + '<div class="scen-body">'
       +   '<div><div class="scen-unit-code">'+esc(s.unit.code)+'</div><div class="scen-unit-loc">'+esc(s.unit.loc)+' · '+(s.unit.m2||'—')+' m²</div>'
       +   '<div class="scen-price">'+fmtMoney(s.unit.valor)+'</div></div>'
@@ -2207,18 +2240,26 @@
 
     toolbar.querySelector('.aj-apply').addEventListener('click', function(){
       var i = (s.jurosAM||0)/100;
-      var saldoTotal = sp.saldoTotal;
+      // sp.saldoTotal já vem com o ato GLOBAL (informado no passo 1, s.ato)
+      // descontado uma vez — ver computeScenario. Pra reeditar a entrada
+      // aqui sem contar esse ato duas vezes (bug corrigido: o saldo devedor
+      // ficava a menor exatamente no valor do ato quando o corretor já tinha
+      // informado um ato lá no passo 1 e ainda assim ajustava a entrada
+      // direto neste card), desfaz esse desconto antes de aplicar o valor
+      // novo digitado aqui — ele passa a SUBSTITUIR o ato global, nunca a se
+      // somar a ele.
+      var saldoBaseSemAto = sp.saldoTotal + (s.ato || 0);
       var renda = parseFloat(document.getElementById('sRenda').value) || 0;
 
       // ---- entrada/ato: agora digitada direto na linha da subtração ----
-      var atoNeg = Math.max(0, Math.min(saldoTotal, parseFloat(atoInp.value) || 0));
+      var atoNeg = Math.max(0, Math.min(saldoBaseSemAto, parseFloat(atoInp.value) || 0));
       // A quantidade de parcelas da pré não é mais editável aqui (só o
       // valor) — mantém a mesma quantidade que o cálculo automático já usa
       // pra esse prazo.
       var mesesPreNeg = sp.mesesPreEfetivo || 1;
       var parcelaPreNeg = Math.max(0, parseFloat(preInp.value) || 0);
 
-      var saldoAposAtoNeg = Math.max(0, saldoTotal - atoNeg);
+      var saldoAposAtoNeg = Math.max(0, saldoBaseSemAto - atoNeg);
       var valorCobertoPelaPreNeg = mesesPreNeg > 0 ? Math.min(saldoAposAtoNeg, pvOfPmt(parcelaPreNeg, i, mesesPreNeg)) : 0;
       var parcelaPreSemJurosNeg = mesesPreNeg > 0 ? valorCobertoPelaPreNeg / mesesPreNeg : 0;
       var saldoResidualNeg = Math.max(0, saldoAposAtoNeg - valorCobertoPelaPreNeg);
@@ -2297,6 +2338,39 @@
         }
       });
     });
+  }
+
+  // Troca de prazo escolhido (filtro "Prazo: —/30x/60x/90x" no cabeçalho do
+  // card): precisa re-renderizar o card inteiro, porque o destaque/
+  // recolhimento (ver renderSubPlan) muda em TODOS os prazos daquela unidade
+  // ao mesmo tempo (o escolhido abre e ganha fundo azul; os outros fecham).
+  function wireTermSelect(container, scenarios){
+    container.querySelectorAll('.scen-term-select').forEach(function(sel){
+      sel.addEventListener('change', function(){
+        var card = sel.closest('.scen-card');
+        var scenIdx = card ? parseInt(card.getAttribute('data-scen-idx'), 10) : NaN;
+        var s = scenarios[scenIdx];
+        if (!s) return;
+        s.selectedTerm = sel.value ? parseInt(sel.value, 10) : null;
+        rerenderScenarioCard(container, scenarios, scenIdx);
+      });
+    });
+  }
+
+  // Re-renderiza só UM card do grid ao vivo (mantém os demais cards como
+  // estão) — usado pelo filtro de prazo acima. Reaplica os wires de ajuste/
+  // flag/prazo no container inteiro depois (idempotente: só reatacha os
+  // listeners nos elementos que existem agora no DOM).
+  function rerenderScenarioCard(container, scenarios, scenIdx){
+    var oldCard = container.querySelector('.scen-card[data-scen-idx="'+scenIdx+'"]');
+    if (!oldCard) return;
+    var html = renderScenarioCard(scenarios[scenIdx], {scenIdx: scenIdx, showAjuste: true, selectable: true, selectedTier: selectedScenarioTier});
+    var wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    oldCard.replaceWith(wrap.firstElementChild);
+    wireAjusteBlocks(container, scenarios);
+    wireScenarioSelect(container);
+    wireTermSelect(container, scenarios);
   }
 
   document.getElementById('saveSimBtn').addEventListener('click', function(){

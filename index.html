@@ -1379,6 +1379,13 @@
       });
       UNITS = flat;
       renderAll();
+      // Histórico usa meta.conclusaoObraDate (deste mesmo snapshot) pra
+      // calcular a data das demais séries no bloco "Datas de vencimento" —
+      // se essa assinatura chegar depois do primeiro render do Histórico
+      // (corrida comum logo após o login), sem isso a 3ª linha do bloco
+      // ficaria faltando até o usuário mexer em algo que re-renderize a
+      // lista por outro motivo.
+      renderHistorico();
     }, function(err){ console.error('db error', err); dbUnavailable(); });
   }
   function subscribeSimulacoes(){

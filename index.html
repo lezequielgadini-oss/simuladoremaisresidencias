@@ -2290,6 +2290,17 @@
       if (!qtdPreCompat.length){
         for (var nQtd2=1; nQtd2<=mesesPre; nQtd2++) qtdPreCompat.push(nQtd2);
       }
+      // Garante que a quantidade já aplicada apareça na lista mesmo que não
+      // bata mais o piso pro saldo de agora (ex.: a entrada foi aumentada
+      // bastante depois que essa quantidade já tinha sido travada/aplicada).
+      // Sem isso o <select> "perde" a opção marcada como selected e o
+      // navegador cai pra primeira opção da lista — mostrando uma
+      // quantidade errada na tela mesmo com o valor real (sp.ajusteManual)
+      // intacto por baixo.
+      if (mesesPreReal >= 1 && mesesPreReal <= mesesPre && qtdPreCompat.indexOf(mesesPreReal) === -1){
+        qtdPreCompat.push(mesesPreReal);
+        qtdPreCompat.sort(function(a,b){ return a-b; });
+      }
       if (qtdPreCompat.length > 1){
         qtdPreOptsHtml = qtdPreCompat.map(function(n){
           return '<option value="'+n+'"'+(n===mesesPreReal?' selected':'')+'>'+n+'x</option>';

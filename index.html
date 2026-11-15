@@ -2261,7 +2261,13 @@
     var reducaoHtml = sp.reducaoFinanciamento
       ? '<div class="subplan-reducao">Redução do valor de financiamento — os créditos (entrada + financiamento + subsídio + FGTS + desconto) cobrem a unidade. Financiamento ajustado em −'+fmtMoney(sp.reducaoValor)+' (de '+fmtMoney(sp.financiamentoAjustado + sp.reducaoValor)+' para '+fmtMoney(sp.financiamentoAjustado)+').</div>'
       : '';
-    var mesesPreReal = sp.mesesPreEfetivo != null ? sp.mesesPreEfetivo : mesesPre;
+    // Quando a pré já foi negociada manualmente, a quantidade "real" é a que
+    // ficou salva em sp.ajusteManual.mesesPreNeg (pode ter sido escolhida
+    // pelo corretor ou recalculada pela correção automática) — nunca a
+    // quantidade congelada do cálculo automático original (sp.mesesPreEfetivo),
+    // senão o seletor abaixo marca a opção errada como selecionada (mesma
+    // lógica já usada em mesesPreLanc/mesesPreReal em outros pontos do arquivo).
+    var mesesPreReal = sp.ajusteManual ? sp.ajusteManual.mesesPreNeg : (sp.mesesPreEfetivo != null ? sp.mesesPreEfetivo : mesesPre);
     // Quando editável, a quantidade de parcelas de pré também vira
     // escolhível (não fica mais travada na quantidade que o cálculo
     // automático "congelou" antes de o corretor começar a negociar) — mas

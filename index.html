@@ -226,6 +226,7 @@
   .scen-plan-row.bold{font-weight:700;}
   .scen-plan.subtracao{margin-bottom:9px;}
   .scen-plan.subtracao .valor-base .v{font-weight:700;}
+  .scen-plan.subtracao .avaliacao .k, .scen-plan.subtracao .avaliacao .v{color:var(--text-muted); font-weight:500; font-size:12.5px;}
   .scen-plan.subtracao .sub .k{color:var(--text-faint);}
   .scen-plan.subtracao .sub .v{color:var(--text-muted); font-weight:500;}
 
@@ -278,8 +279,8 @@
   .scen-plan-row.editable .v input{font-family:'IBM Plex Mono',monospace; font-weight:600; width:122px; text-align:right; border:1px solid var(--accent); border-radius:6px; padding:3px 7px; background:var(--bg); color:var(--text); font-size:12.5px;}
   .scen-plan-row.bold .v input{font-family:'IBM Plex Mono',monospace; font-weight:600; width:122px; text-align:right; border:1px solid var(--accent); border-radius:6px; padding:3px 7px; background:var(--bg); color:var(--text); font-size:12.5px;}
   .scen-plan-row .v input:focus{outline:none; box-shadow:0 0 0 2px var(--accent-soft);}
-  .scen-plan-row .k select.aj-pre-qtd{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:11.5px; border:1px solid var(--accent); border-radius:5px; padding:1px 4px; background:var(--bg); color:var(--text); margin:0 1px;}
-  .scen-plan-row .k select.aj-pre-qtd:focus{outline:none; box-shadow:0 0 0 2px var(--accent-soft);}
+  .scen-plan-row .k select.aj-pre-qtd, .scen-plan-row .k select.aj-pos-qtd{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:11.5px; border:1px solid var(--accent); border-radius:5px; padding:1px 4px; background:var(--bg); color:var(--text); margin:0 1px;}
+  .scen-plan-row .k select.aj-pre-qtd:focus, .scen-plan-row .k select.aj-pos-qtd:focus{outline:none; box-shadow:0 0 0 2px var(--accent-soft);}
   .ajuste-toolbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:8px 0 2px;}
   .ajuste-toolbar .btn{padding:6px 12px; font-size:11px; border-radius:7px;}
   .ajuste-toolbar .btn:disabled{opacity:.4; cursor:not-allowed;}
@@ -315,6 +316,9 @@
   .pill{display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:600; white-space:nowrap;}
   .pill i{width:6px; height:6px; border-radius:99px; background:currentColor;}
   .empty-state{padding:48px 20px; text-align:center; color:var(--text-muted);}
+  #unidadeEscolhidaStatusNote{margin-top:8px; padding:7px 10px; border-radius:8px; font-size:12px; display:flex; align-items:center; gap:7px;}
+  .unit-status-pill{margin-left:7px; vertical-align:middle;}
+  .unit-status-aviso{margin:6px 0 2px; padding:7px 10px; border-radius:8px; font-size:12px;}
 
   /* ---------- history ---------- */
   .hist-item{background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; box-shadow:var(--shadow); margin-bottom:10px; overflow:hidden;}
@@ -523,6 +527,7 @@
       <div class="field" id="unidadeEscolhidaSelectWrap" hidden style="margin-top:12px;">
         <label>Unidade disponível</label>
         <select id="unidadeEscolhidaSelect"></select>
+        <div id="unidadeEscolhidaStatusNote" hidden></div>
       </div>
     </div>
 
@@ -856,6 +861,17 @@
   }
   var STATUS_LOOKUP = {};
   STATUS_ORDER.forEach(function(s){ STATUS_LOOKUP[normStatus(s)] = s; });
+  // Unidades Reservada/Em negociação continuam aparecendo na tabela de
+  // preços com esse status, mas também podem ser escolhidas pra simular
+  // (passo "Sim — já escolhi a unidade") — só avisa o corretor sobre o
+  // status real, não bloqueia mais a seleção. "Venda aprovada" e qualquer
+  // outro status (ex.: um erro de digitação na planilha) continuam de
+  // fora, por segurança. A comparação usa normStatus pra não depender de
+  // acento/maiúscula exatos de como a planilha de origem escreveu.
+  var STATUS_SELECIONAVEIS_NORM = ['disponivel', 'reservada', 'em negociacao'];
+  function unitSelecionavel(u){
+    return STATUS_SELECIONAVEIS_NORM.indexOf(normStatus(u && u.status)) !== -1;
+  }
 
   function pmt(pv, iMonthly, n){
     if (n<=0 || pv<=0) return n>0 ? pv/Math.max(n,1) : 0;
@@ -1666,21 +1682,56 @@
       });
     });
   }
+  // Ordem de prioridade na lista (Disponível primeiro, depois Reservada,
+  // depois Em negociação/qualquer outro status ainda selecionável) — só
+  // pra quem está escolhendo a unidade bater o olho primeiro nas
+  // realmente disponíveis, sem esconder as outras.
+  function statusPrioridade(status){
+    var n = normStatus(status);
+    if (n === 'disponivel') return 0;
+    if (n === 'reservada') return 1;
+    return 2;
+  }
   function fillUnidadeEscolhidaSelect(){
     var sel = document.getElementById('unidadeEscolhidaSelect');
     if (!selectedEmpSlug){ sel.innerHTML = ''; return; }
-    var list = unitsByEmp(selectedEmpSlug).filter(function(u){ return u.status === "Disponível"; });
-    list = list.slice().sort(function(a,b){ return normCode(a.code).localeCompare(normCode(b.code)); });
+    var list = unitsByEmp(selectedEmpSlug).filter(unitSelecionavel);
+    list = list.slice().sort(function(a,b){
+      var pa = statusPrioridade(a.status), pb = statusPrioridade(b.status);
+      return pa!==pb ? pa-pb : normCode(a.code).localeCompare(normCode(b.code));
+    });
     if (!list.length){
       sel.innerHTML = '<option value="">Nenhuma unidade disponível</option>';
       unidadeEscolhidaId = null;
+      updateUnidadeEscolhidaStatusNote();
       return;
     }
     sel.innerHTML = list.map(function(u){
-      return '<option value="'+esc(u.id)+'">'+esc(u.code)+' · '+(u.m2||'—')+' m² · '+fmtMoney(u.valor)+'</option>';
+      var statusSuffix = normStatus(u.status) !== 'disponivel' ? ' · '+esc(u.status) : '';
+      return '<option value="'+esc(u.id)+'">'+esc(u.code)+' · '+(u.m2||'—')+' m² · '+fmtMoney(u.valor)+statusSuffix+'</option>';
     }).join('');
     unidadeEscolhidaId = list[0].id;
     sel.value = unidadeEscolhidaId;
+    updateUnidadeEscolhidaStatusNote();
+  }
+  // Unidade Reservada/Em negociação ainda pode ser escolhida pra simular
+  // (não trava mais a seleção) — mas, pra o corretor não confundir com
+  // disponível, mostra um aviso com o status real logo abaixo do seletor
+  // sempre que a unidade marcada no momento não estiver "Disponível".
+  function updateUnidadeEscolhidaStatusNote(){
+    var note = document.getElementById('unidadeEscolhidaStatusNote');
+    if (!note) return;
+    var u = unidadeEscolhidaId ? unitsByEmp(selectedEmpSlug).filter(function(x){ return x.id===unidadeEscolhidaId; })[0] : null;
+    if (!u || normStatus(u.status) === 'disponivel'){
+      note.hidden = true;
+      note.innerHTML = '';
+      return;
+    }
+    var sv = STATUS_VAR[u.status] || {c:'var(--st-res)', bg:'var(--st-res-soft)'};
+    note.hidden = false;
+    note.style.color = sv.c;
+    note.style.background = sv.bg;
+    note.innerHTML = '<strong>'+esc(u.status)+'</strong> — esta unidade consta com esse status na tabela de preços. Confirme a disponibilidade antes de enviar para aprovação.';
   }
   document.getElementById('unidadeEscolhidaNao').addEventListener('click', function(){
     unidadeEscolhidaModo = 'nao';
@@ -1700,6 +1751,7 @@
   });
   document.getElementById('unidadeEscolhidaSelect').addEventListener('change', function(){
     unidadeEscolhidaId = this.value || null;
+    updateUnidadeEscolhidaStatusNote();
   });
 
   /* ================= scenario generation ================= */
@@ -1917,6 +1969,13 @@
       jurosAM: inputs.jurosAM,
       subPlans: subPlans,
       avaliacaoVistaBela: avaliacaoVistaBela,
+      // Avaliação informada manualmente no passo 1 (Avaliação CEF) — existem
+      // regras que mudam esse valor caso a caso, então quando o corretor
+      // preenche esse campo ele tem prioridade sobre a avaliação padrão da
+      // tabela de preços (unit.avaliacao) na hora de exibir — ver
+      // renderSubPlan/avaliacaoEfetiva. Sem preenchimento manual, cai pra
+      // avaliação da tabela.
+      avaliacaoInformada: inputs.avaliacao || 0,
       // Bônus total (pra lançamento no sistema, só aparece no histórico — ver
       // renderScenarioCard): avaliação do CEF menos o valor de venda desta
       // unidade. Não tem célula obrigatória pra avaliação (o campo é
@@ -2090,7 +2149,7 @@
     // era de uma unidade única), se ela ainda estiver disponível no estoque
     var escolhida = (s.scenarios||[]).filter(function(sc){ return sc.tier === 'escolhida'; })[0];
     if (escolhida && escolhida.unit){
-      var aindaDisp = unitsByEmp(s.empSlug).filter(function(u){ return u.id === escolhida.unit.id && u.status === 'Disponível'; })[0];
+      var aindaDisp = unitsByEmp(s.empSlug).filter(function(u){ return u.id === escolhida.unit.id && unitSelecionavel(u); })[0];
       if (aindaDisp){
         unidadeEscolhidaModo = 'sim';
         document.getElementById('unidadeEscolhidaSim').classList.add('active');
@@ -2099,6 +2158,7 @@
         document.getElementById('unidadeEscolhidaSelectWrap').hidden = false;
         unidadeEscolhidaId = aindaDisp.id;
         document.getElementById('unidadeEscolhidaSelect').value = aindaDisp.id;
+        updateUnidadeEscolhidaStatusNote();
         renderTipologiaSubstCard();
       } else {
         showToast('A unidade originalmente escolhida não está mais disponível — selecione outra opção.');
@@ -2237,6 +2297,14 @@
     var eff = effectiveSubPlan(sp, s);
     var warn = eff.overPre || eff.overPos;
     var editable = !!ajusteCtx;
+    // Avaliação a exibir antes do Valor de venda: a informada manualmente
+    // no passo 1 tem prioridade (existem regras que mudam esse valor
+    // caso a caso, aí precisa ser preenchida manual) — sem ela, cai pra
+    // avaliação cadastrada por unidade na própria tabela de preços.
+    var avaliacaoEfetiva = s.avaliacaoInformada > 0 ? s.avaliacaoInformada : (s.unit.avaliacao || 0);
+    var avaliacaoRowHtml = avaliacaoEfetiva > 0
+      ? '<div class="scen-plan-row valor-base avaliacao"><span class="k">Avaliação</span><span class="v">'+fmtMoney(avaliacaoEfetiva)+'</span></div>'
+      : '';
     // Operação de subtração: Valor de venda menos os créditos (financiamento,
     // subsídio, FGTS, entrada — informada, calculada ou ajustada — e o
     // desconto do prazo) até chegar no Saldo Devedor. Na tela de geração da
@@ -2250,6 +2318,7 @@
       ? '<div class="scen-plan-row sub editable"><span class="k">(−) '+atoLabel+'</span><span class="v"><input type="number" class="aj-ato" min="0" step="10" value="'+(eff.ato?eff.ato.toFixed(2):'0')+'"></span></div>'
       : (eff.ato>0 ? '<div class="scen-plan-row sub"><span class="k">(−) '+atoLabel+'</span><span class="v">'+fmtMoney(eff.ato)+'</span></div>' : '');
     var subtracaoHtml = '<div class="scen-plan subtracao">'
+      +   avaliacaoRowHtml
       + '<div class="scen-plan-row valor-base"><span class="k">Valor de venda</span><span class="v">'+fmtMoney(s.unit.valor)+'</span></div>'
       +   (s.financiamentoCef>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Financiamento CEF aprovado</span><span class="v">'+fmtMoney(s.financiamentoCef)+'</span></div>' : '')
       +   (s.subsidio>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Subsídio</span><span class="v">'+fmtMoney(s.subsidio)+'</span></div>' : '')
@@ -2307,6 +2376,38 @@
         }).join('');
       }
     }
+    // A quantidade de parcelas da pós também vira escolhível quando
+    // editável — só a quantidade (o valor continua sempre calculado a
+    // partir dela, nunca digitado livre). O teto é o prazo total deste
+    // card menos a quantidade de pré em vigor agora (nunca pode passar
+    // disso — ex.: num prazo de 60x com 19x de pré, o máximo de pós é
+    // 41x), e dentro desse teto só entram as quantidades cuja parcela
+    // bateria pelo menos o piso de R$500 (mesma regra já aplicada no
+    // cálculo automático via ajustarMesesPos). Sem saldo residual não faz
+    // sentido nenhuma quantidade de pós.
+    var qtdPosOptsHtml = '';
+    if (editable && eff.saldoResidual > 0){
+      var mesesPosNominalEff = Math.max(1, sp.T - mesesPreReal);
+      var qtdPosCompat = [];
+      for (var nPos=1; nPos<=mesesPosNominalEff; nPos++){
+        if (pmt(eff.saldoResidual, iAjusteAM, nPos) >= MIN_PARCELA_POS - 1e-6) qtdPosCompat.push(nPos);
+      }
+      if (!qtdPosCompat.length){
+        for (var nPos2=1; nPos2<=mesesPosNominalEff; nPos2++) qtdPosCompat.push(nPos2);
+      }
+      // mesma rede de segurança do seletor da pré: garante que a
+      // quantidade já aplicada apareça na lista mesmo que não bata mais o
+      // piso pro saldo residual de agora.
+      if (eff.mesesPos >= 1 && eff.mesesPos <= mesesPosNominalEff && qtdPosCompat.indexOf(eff.mesesPos) === -1){
+        qtdPosCompat.push(eff.mesesPos);
+        qtdPosCompat.sort(function(a,b){ return a-b; });
+      }
+      if (qtdPosCompat.length > 1){
+        qtdPosOptsHtml = qtdPosCompat.map(function(n){
+          return '<option value="'+n+'"'+(n===eff.mesesPos?' selected':'')+'>'+n+'x</option>';
+        }).join('');
+      }
+    }
     var lancamentoHtml = '';
     if (showLancamento){
       lancamentoHtml = '<div class="scen-plan lancamento">'
@@ -2338,6 +2439,7 @@
       altHtml = '<details class="subplan-alt">'
         + '<summary class="subplan-alt-title">Opção alternativa — pré até 40% <span>(não é a opção padrão, não editável)</span></summary>'
         + '<div class="scen-plan subtracao">'
+        +   avaliacaoRowHtml
         +   '<div class="scen-plan-row valor-base"><span class="k">Valor de venda</span><span class="v">'+fmtMoney(s.unit.valor)+'</span></div>'
         +   (s.financiamentoCef>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Financiamento CEF aprovado</span><span class="v">'+fmtMoney(s.financiamentoCef)+'</span></div>' : '')
         +   (s.subsidio>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Subsídio</span><span class="v">'+fmtMoney(s.subsidio)+'</span></div>' : '')
@@ -2386,7 +2488,7 @@
       +   (eff.valorCobertoPelaPre>0 ? '<div class="scen-plan-row"><span class="k">Saldo devedor financiado na pré</span><span class="v">'+fmtMoney(eff.valorCobertoPelaPre)+'</span></div>' : '')
       +   '<div class="scen-plan-row bold'+(eff.valorCobertoPelaPre>0?'':' sep')+'"><span class="k">Parcela pré ('+(qtdPreOptsHtml ? '<select class="aj-pre-qtd">'+qtdPreOptsHtml+'</select>' : mesesPreReal+'x')+')'+(eff.capped?' <em>no teto</em>':'')+(eff.manual?' <em class="badge-manual">ajustada</em>':'')+'</span><span class="v">'+(editable ? '<input type="number" class="aj-pre" min="0" step="10" value="'+(eff.parcelaPre?eff.parcelaPre.toFixed(2):'0')+'">' : fmtMoney(eff.parcelaPre))+'</span></div>'
       +   (eff.saldoResidual>0 ? '<div class="scen-plan-row"><span class="k">Saldo residual → pós</span><span class="v">'+fmtMoney(eff.saldoResidual)+'</span></div>' : '')
-      +   (eff.saldoResidual>0 ? '<div class="scen-plan-row"><span class="k">Pós residual ('+eff.mesesPos+'x)</span><span class="v">'+fmtMoney(eff.parcelaPosResidual)+'</span></div>' : '')
+      +   (eff.saldoResidual>0 ? '<div class="scen-plan-row"><span class="k">Pós residual ('+(qtdPosOptsHtml ? '<select class="aj-pos-qtd">'+qtdPosOptsHtml+'</select>' : eff.mesesPos+'x')+')</span><span class="v">'+fmtMoney(eff.parcelaPosResidual)+'</span></div>' : '')
       + '</div>'
       + semSaldoNote
       + (!eff.manual && sp.mesesPreAjustado ? '<div class="subplan-note">Prazo de pré reduzido de '+mesesPre+'x para '+mesesPreReal+'x — parcela mínima de '+fmtMoney(MIN_PARCELA_POS)+'.</div>' : '')
@@ -2470,12 +2572,25 @@
         + '</select>'
       : '';
     var scenIdxAttr = (opts.scenIdx!=null) ? ' data-scen-idx="'+opts.scenIdx+'"' : '';
+    // Unidade Reservada/Em negociação (ou qualquer outro status que não
+    // "Disponível") pode ser simulada, mas o card deixa isso bem visível:
+    // uma tag com a cor/nome do status ao lado do código da unidade, e um
+    // aviso logo abaixo dos atributos — nunca escondido, pra ninguém
+    // confundir com uma unidade realmente livre.
+    var unitStatusTagHtml = '';
+    var unitStatusAvisoHtml = '';
+    if (s.unit.status && normStatus(s.unit.status) !== 'disponivel'){
+      var svUnit = STATUS_VAR[s.unit.status] || {c:'var(--st-res)', bg:'var(--st-res-soft)'};
+      unitStatusTagHtml = '<span class="pill unit-status-pill" style="color:'+svUnit.c+'; background:'+svUnit.bg+'"><i></i>'+esc(s.unit.status)+'</span>';
+      unitStatusAvisoHtml = '<div class="unit-status-aviso" style="color:'+svUnit.c+'; background:'+svUnit.bg+'">Atenção: esta unidade consta como <strong>'+esc(s.unit.status)+'</strong> na tabela de preços — confirme a disponibilidade antes de enviar para aprovação.</div>';
+    }
     return '<div class="scen-card tier-'+s.tier+highlightClass+'"'+scenIdxAttr+'>'
       + '<div class="scen-tag '+s.tier+'"><span>'+esc(s.label)+'</span><div class="scen-tag-actions">'+termSelectHtml+flagHtml+'</div></div>'
       + '<div class="scen-body">'
-      +   '<div><div class="scen-unit-code">'+esc(s.unit.code)+'</div><div class="scen-unit-loc">'+esc(s.unit.loc)+' · '+(s.unit.m2||'—')+' m²</div>'
+      +   '<div><div class="scen-unit-code">'+esc(s.unit.code)+unitStatusTagHtml+'</div><div class="scen-unit-loc">'+esc(s.unit.loc)+' · '+(s.unit.m2||'—')+' m²</div>'
       +   '<div class="scen-price">'+fmtMoney(s.unit.valor)+'</div></div>'
       +   '<div class="scen-attrs">'+attrChips(s.unit)+'</div>'
+      +   unitStatusAvisoHtml
       +   vbAlertHtml
       +   parcelaCefHtml
       +   bonusHtml
@@ -2501,6 +2616,7 @@
     var atoInp = blockEl.querySelector('.aj-ato');
     var preInp = blockEl.querySelector('.aj-pre');
     var preQtdSel = blockEl.querySelector('.aj-pre-qtd');
+    var posQtdSel = blockEl.querySelector('.aj-pos-qtd');
 
     function rerender(){
       var hasRenda = document.getElementById('sRenda').value;
@@ -2551,15 +2667,25 @@
       var parcelaPreSemJurosNeg = mesesPreNeg > 0 ? valorCobertoPelaPreNeg / mesesPreNeg : 0;
       var saldoResidualNeg = Math.max(0, saldoAposAtoNeg - valorCobertoPelaPreNeg);
 
-      // A pós NÃO é negociada por valor — a quantidade de parcelas é a que
-      // sobra do prazo total já escolhido neste card (T menos os meses de
-      // pré), com a mesma regra de piso de R$500 do cálculo automático. A
-      // parcela (com e sem juros) é calculada pra frente (PMT) em cima do
-      // saldo residual recalculado.
+      // A pós não é negociada por valor — só a quantidade de parcelas é
+      // escolhível (seletor ao lado do rótulo, filtrado pelo piso de R$500 —
+      // ver renderSubPlan), nunca passando do que sobra do prazo total já
+      // escolhido neste card (T menos os meses de pré em vigor agora). O
+      // valor da parcela (com e sem juros) é sempre calculado pra frente
+      // (PMT) em cima da quantidade escolhida e do saldo residual
+      // recalculado — se a quantidade escolhida não existir mais (saldo
+      // mudou entre o render e o clique) ou não bater mais o piso, cai de
+      // volta pro cálculo automático (mesma lógica de antes).
       var mesesPosNominal = Math.max(1, sp.T - mesesPreNeg);
       var mesesPosFixo = 0, parcelaPosNeg = 0, parcelaPosSemJurosNeg = 0;
       if (saldoResidualNeg > 0.005){
-        mesesPosFixo = ajustarMesesPos(saldoResidualNeg, i, mesesPosNominal);
+        var mesesPosEscolhido = posQtdSel ? parseInt(posQtdSel.value, 10) : null;
+        if (mesesPosEscolhido && mesesPosEscolhido >= 1 && mesesPosEscolhido <= mesesPosNominal
+            && pmt(saldoResidualNeg, i, mesesPosEscolhido) >= MIN_PARCELA_POS - 1e-6){
+          mesesPosFixo = mesesPosEscolhido;
+        } else {
+          mesesPosFixo = ajustarMesesPos(saldoResidualNeg, i, mesesPosNominal);
+        }
         parcelaPosNeg = pmt(saldoResidualNeg, i, mesesPosFixo);
         parcelaPosSemJurosNeg = mesesPosFixo>0 ? saldoResidualNeg / mesesPosFixo : 0;
       } else {

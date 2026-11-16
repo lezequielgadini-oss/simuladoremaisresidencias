@@ -316,9 +316,7 @@
   .pill{display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:600; white-space:nowrap;}
   .pill i{width:6px; height:6px; border-radius:99px; background:currentColor;}
   .empty-state{padding:48px 20px; text-align:center; color:var(--text-muted);}
-  #unidadeEscolhidaStatusNote{margin-top:8px; padding:7px 10px; border-radius:8px; font-size:12px; display:flex; align-items:center; gap:7px;}
   .unit-status-pill{margin-left:7px; vertical-align:middle;}
-  .unit-status-aviso{margin:6px 0 2px; padding:7px 10px; border-radius:8px; font-size:12px;}
 
   /* ---------- history ---------- */
   .hist-item{background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; box-shadow:var(--shadow); margin-bottom:10px; overflow:hidden;}
@@ -527,7 +525,6 @@
       <div class="field" id="unidadeEscolhidaSelectWrap" hidden style="margin-top:12px;">
         <label>Unidade disponível</label>
         <select id="unidadeEscolhidaSelect"></select>
-        <div id="unidadeEscolhidaStatusNote" hidden></div>
       </div>
     </div>
 
@@ -1703,36 +1700,38 @@
     if (!list.length){
       sel.innerHTML = '<option value="">Nenhuma unidade disponível</option>';
       unidadeEscolhidaId = null;
-      updateUnidadeEscolhidaStatusNote();
       return;
     }
-    sel.innerHTML = list.map(function(u){
-      var statusSuffix = normStatus(u.status) !== 'disponivel' ? ' · '+esc(u.status) : '';
-      return '<option value="'+esc(u.id)+'">'+esc(u.code)+' · '+(u.m2||'—')+' m² · '+fmtMoney(u.valor)+statusSuffix+'</option>';
+    // Agrupa em optgroups (Disponíveis / Reservadas / Em negociação etc.)
+    // pra quem abrir o seletor enxergar de cara que as unidades com outro
+    // status também estão ali pra simular, em vez de ficarem perdidas no
+    // meio de uma lista única e comprida.
+    var groups = [], groupByKey = {};
+    list.forEach(function(u){
+      var isDisp = normStatus(u.status) === 'disponivel';
+      var key = isDisp ? '__disp__' : esc(u.status);
+      if (!groupByKey[key]){
+        groupByKey[key] = { label: isDisp ? 'Disponíveis' : u.status, items: [] };
+        groups.push(groupByKey[key]);
+      }
+      groupByKey[key].items.push(u);
+    });
+    sel.innerHTML = groups.map(function(g){
+      var optsHtml = g.items.map(function(u){
+        return '<option value="'+esc(u.id)+'">'+esc(u.code)+' · '+(u.m2||'—')+' m² · '+fmtMoney(u.valor)+'</option>';
+      }).join('');
+      return groups.length > 1
+        ? '<optgroup label="'+esc(g.label)+'">'+optsHtml+'</optgroup>'
+        : optsHtml;
     }).join('');
     unidadeEscolhidaId = list[0].id;
     sel.value = unidadeEscolhidaId;
-    updateUnidadeEscolhidaStatusNote();
   }
   // Unidade Reservada/Em negociação ainda pode ser escolhida pra simular
-  // (não trava mais a seleção) — mas, pra o corretor não confundir com
-  // disponível, mostra um aviso com o status real logo abaixo do seletor
-  // sempre que a unidade marcada no momento não estiver "Disponível".
-  function updateUnidadeEscolhidaStatusNote(){
-    var note = document.getElementById('unidadeEscolhidaStatusNote');
-    if (!note) return;
-    var u = unidadeEscolhidaId ? unitsByEmp(selectedEmpSlug).filter(function(x){ return x.id===unidadeEscolhidaId; })[0] : null;
-    if (!u || normStatus(u.status) === 'disponivel'){
-      note.hidden = true;
-      note.innerHTML = '';
-      return;
-    }
-    var sv = STATUS_VAR[u.status] || {c:'var(--st-res)', bg:'var(--st-res-soft)'};
-    note.hidden = false;
-    note.style.color = sv.c;
-    note.style.background = sv.bg;
-    note.innerHTML = '<strong>'+esc(u.status)+'</strong> — esta unidade consta com esse status na tabela de preços. Confirme a disponibilidade antes de enviar para aprovação.';
-  }
+  // (não trava mais a seleção) — o status real fica indicado direto na
+  // lista do seletor (" · Reservada") e, depois de gerar a simulação, numa
+  // única tag no card do cenário — essa é a única confirmação mostrada,
+  // sem repetir o aviso em mais lugares.
   document.getElementById('unidadeEscolhidaNao').addEventListener('click', function(){
     unidadeEscolhidaModo = 'nao';
     unidadeEscolhidaId = null;
@@ -1751,7 +1750,6 @@
   });
   document.getElementById('unidadeEscolhidaSelect').addEventListener('change', function(){
     unidadeEscolhidaId = this.value || null;
-    updateUnidadeEscolhidaStatusNote();
   });
 
   /* ================= scenario generation ================= */
@@ -2158,7 +2156,6 @@
         document.getElementById('unidadeEscolhidaSelectWrap').hidden = false;
         unidadeEscolhidaId = aindaDisp.id;
         document.getElementById('unidadeEscolhidaSelect').value = aindaDisp.id;
-        updateUnidadeEscolhidaStatusNote();
         renderTipologiaSubstCard();
       } else {
         showToast('A unidade originalmente escolhida não está mais disponível — selecione outra opção.');
@@ -2573,16 +2570,13 @@
       : '';
     var scenIdxAttr = (opts.scenIdx!=null) ? ' data-scen-idx="'+opts.scenIdx+'"' : '';
     // Unidade Reservada/Em negociação (ou qualquer outro status que não
-    // "Disponível") pode ser simulada, mas o card deixa isso bem visível:
-    // uma tag com a cor/nome do status ao lado do código da unidade, e um
-    // aviso logo abaixo dos atributos — nunca escondido, pra ninguém
-    // confundir com uma unidade realmente livre.
+    // "Disponível") pode ser simulada — o card mostra isso com uma única
+    // tag, com a cor/nome do status, ao lado do código da unidade. Essa é
+    // a única confirmação exibida (sem repetir avisos em outros lugares).
     var unitStatusTagHtml = '';
-    var unitStatusAvisoHtml = '';
     if (s.unit.status && normStatus(s.unit.status) !== 'disponivel'){
       var svUnit = STATUS_VAR[s.unit.status] || {c:'var(--st-res)', bg:'var(--st-res-soft)'};
       unitStatusTagHtml = '<span class="pill unit-status-pill" style="color:'+svUnit.c+'; background:'+svUnit.bg+'"><i></i>'+esc(s.unit.status)+'</span>';
-      unitStatusAvisoHtml = '<div class="unit-status-aviso" style="color:'+svUnit.c+'; background:'+svUnit.bg+'">Atenção: esta unidade consta como <strong>'+esc(s.unit.status)+'</strong> na tabela de preços — confirme a disponibilidade antes de enviar para aprovação.</div>';
     }
     return '<div class="scen-card tier-'+s.tier+highlightClass+'"'+scenIdxAttr+'>'
       + '<div class="scen-tag '+s.tier+'"><span>'+esc(s.label)+'</span><div class="scen-tag-actions">'+termSelectHtml+flagHtml+'</div></div>'
@@ -2590,7 +2584,6 @@
       +   '<div><div class="scen-unit-code">'+esc(s.unit.code)+unitStatusTagHtml+'</div><div class="scen-unit-loc">'+esc(s.unit.loc)+' · '+(s.unit.m2||'—')+' m²</div>'
       +   '<div class="scen-price">'+fmtMoney(s.unit.valor)+'</div></div>'
       +   '<div class="scen-attrs">'+attrChips(s.unit)+'</div>'
-      +   unitStatusAvisoHtml
       +   vbAlertHtml
       +   parcelaCefHtml
       +   bonusHtml

@@ -784,6 +784,17 @@
   // + 16 de pós. O desconto também é escalonado por esse prazo total.
   var TOTAL_TERMS = [30, 60, 90];
   function descontoPorPrazo(t){ return t<=30 ? 8000 : (t<=60 ? 4000 : 0); }
+  // O desconto escalonado por prazo (8000/4000/0) só existe pros
+  // empreendimentos Ecoviva Vista Bela e Ecoviva Maisparque Rio Preto — é uma
+  // regra comercial específica deles. Nos demais empreendimentos (inclusive
+  // os que ainda vamos implantar), o desconto automático passa a ser só a
+  // diferença entre a avaliação (CEF) e o valor de venda da unidade — ver
+  // descontoAutomatico() logo abaixo.
+  var DESCONTO_ESCALONADO_SLUGS = ['vista-bela', 'maisparque-rio-preto'];
+  function descontoAutomatico(empSlug, T, avaliacaoEfetiva, valorVenda){
+    if (DESCONTO_ESCALONADO_SLUGS.indexOf(empSlug) !== -1) return descontoPorPrazo(T);
+    return Math.max(0, avaliacaoEfetiva - valorVenda);
+  }
   var MIN_PARCELA_POS = 500;
   // A parcela pós (residual) nunca pode ficar abaixo de R$500 — se o prazo
   // nominal (mesesPosMax) resultar numa parcela menor que isso, diminui a
@@ -1811,13 +1822,20 @@
     // dele. A simulação de ato só entra quando o campo de entrada está
     // zerado (o cliente ainda não sabe quanto vai dar de entrada).
     var atoInformado = inputs.ato > 0;
+    // Avaliação efetiva da unidade (pro desconto automático nos
+    // empreendimentos fora da lista acima): o campo manual do passo 1 tem
+    // prioridade quando preenchido, senão usa a avaliação cadastrada por
+    // unidade na tabela de preços — mesma regra de prioridade usada na
+    // exibição (ver avaliacaoInformada/avaliacaoEfetiva mais abaixo).
+    var avaliacaoEfetiva = inputs.avaliacao > 0 ? inputs.avaliacao : (unit.avaliacao || 0);
     var subPlans = TOTAL_TERMS.map(function(T){
       // T é o prazo TOTAL (pré + pós). O prazo de pós nominal é o que sobra
       // depois dos meses de pré do empreendimento (ex.: 30 no total, 14 de
       // pré → 16 de pós nominal) — mas pode ser encurtado mais abaixo se a
       // parcela pós resultante ficar menor que o piso de R$500.
       var mesesPosNominal = Math.max(1, T - meses);
-      var desconto = inputs.desconto + descontoPorPrazo(T);
+      var descontoAuto = descontoAutomatico(empSlug, T, avaliacaoEfetiva, unit.valor);
+      var desconto = inputs.desconto + descontoAuto;
       // Saldo "cru", sem travar em zero: se ato + financiamento + subsídio +
       // FGTS + desconto já cobrem (ou passam) o valor da unidade, o
       // excedente não é "saldo negativo" — é financiamento aprovado que não
@@ -1939,7 +1957,7 @@
       return {
         T: T, mesesPos: mesesPos, mesesPosAjustado: mesesPosAjustado,
         mesesPreEfetivo: mesesPreEfetivo, mesesPreAjustado: mesesPreAjustado,
-        descontoPrazo: descontoPorPrazo(T), descontoTotal: desconto, saldoTotal: saldoTotal, saldoBruto: saldoBruto,
+        descontoPrazo: descontoAuto, descontoTotal: desconto, saldoTotal: saldoTotal, saldoBruto: saldoBruto,
         atoCalculado: atoCalculado, atoInformado: atoInformado,
         parcelaPre: parcelaPre, capped: capped, saldoResidual: saldoResidual,
         valorCobertoPelaPre: valorCobertoPelaPre,
@@ -1978,8 +1996,14 @@
       // renderScenarioCard): avaliação do CEF menos o valor de venda desta
       // unidade. Não tem célula obrigatória pra avaliação (o campo é
       // opcional no passo 1), então sem ela o bônus fica zero e a linha nem
-      // aparece.
-      bonus: Math.max(0, (inputs.avaliacao||0) - unit.valor)
+      // aparece. Só existe como bônus SEPARADO nos empreendimentos da lista
+      // DESCONTO_ESCALONADO_SLUGS (regra original Vista Bela/Rio Preto, que
+      // soma esse bônus ao desconto do prazo). Nos demais, essa mesma
+      // diferença (avaliação − venda) já virou o desconto automático em si
+      // (ver descontoAutomatico), então aqui fica 0 pra não contar em dobro.
+      bonus: DESCONTO_ESCALONADO_SLUGS.indexOf(empSlug) !== -1
+        ? Math.max(0, (inputs.avaliacao||0) - unit.valor)
+        : 0
     };
   }
 
@@ -2261,9 +2285,13 @@
   // Todos os valores aqui são SEM JUROS (o principal dividido em partes
   // iguais, igual ao bloco "Lançamento da venda" normal), nunca o valor com
   // a curva de juros cobrada do cliente. O BÔNUS aqui soma o bônus por
-  // avaliação (s.bonus) com o desconto do prazo (sp.descontoTotal) — é
-  // assim que o fluxo original soma as duas coisas numa linha só (célula
-  // O33 = M33+M35) pra lançar como um valor único no sistema.
+  // avaliação (s.bonus) com o desconto automático do subplano
+  // (sp.descontoTotal) — é assim que o fluxo original soma as duas coisas
+  // numa linha só (célula O33 = M33+M35) pra lançar como um valor único no
+  // sistema. Só em Vista Bela/Rio Preto as duas parcelas existem de fato
+  // separadas (s.bonus > 0 ali); nos demais empreendimentos s.bonus já vem
+  // zerado de computeScenario porque a diferença avaliação−venda virou o
+  // próprio desconto automático — então a soma aqui não conta em dobro.
   function renderLancamentoAprovadoBlock(sp, s){
     var eff = effectiveSubPlan(sp, s);
     var manual = !!sp.ajusteManual;

@@ -502,10 +502,11 @@
       <div class="grid3">
         <div class="field"><label>FGTS a usar</label><input type="number" id="sFgts" min="0" step="10" value="0"></div>
         <div class="field"><label>Entrada / ATO disponível</label><input type="number" id="sAto" min="0" step="50" value="0"></div>
-        <div class="field"><label>Bônus / desconto negociado</label><input type="number" id="sDesconto" min="0" step="10" value="0"></div>
+        <div class="field"><label>Cheque Casa Paulista</label><input type="number" id="sDesconto" min="0" step="10" value="0"></div>
       </div>
       <div class="grid3">
-        <div class="field"><label>Avaliação (CEF)</label><input type="number" id="sAvaliacao" min="0" step="100" value="0" title="Opcional — só é usado pra calcular o Bônus total (avaliação menos valor de venda), que aparece no histórico depois de salvar."></div>
+        <div class="field"><label>Avaliação (CEF)</label><input type="number" id="sAvaliacao" min="0" step="100" value="0" title="Opcional — só é usado pra calcular o Bônus (avaliação menos valor de venda), que aparece no final da simulação e no histórico depois de salvar."></div>
+        <div class="field"><label>Desconto negociado / Aprovação comercial</label><input type="number" id="sDescontoComercial" min="0" step="10" value="0" title="Desconto adicional negociado com aprovação comercial — reduz o saldo devedor junto com o Cheque Casa Paulista, mas exige aprovação individual do coordenador no histórico."></div>
       </div>
     </div>
 
@@ -1836,7 +1837,16 @@
       // parcela pós resultante ficar menor que o piso de R$500.
       var mesesPosNominal = Math.max(1, T - meses);
       var descontoAuto = descontoAutomatico(empSlug, T);
-      var desconto = inputs.desconto + descontoAuto;
+      // "Cheque Casa Paulista" (inputs.desconto, renomeado — era "Bônus /
+      // desconto negociado") + o desconto automático por prazo (só Vista
+      // Bela/Rio Preto) formam o valor exibido como "(−) Cheque Casa
+      // Paulista" no card. O "Desconto negociado/Aprovação comercial" é um
+      // crédito adicional, negociado separadamente e sujeito a aprovação
+      // individual do coordenador no histórico (ver renderAprovacaoActions) —
+      // mas reduz o saldo devedor do mesmo jeito, por isso entra aqui também.
+      var chequeCasaPaulista = inputs.desconto + descontoAuto;
+      var descontoComercial = inputs.descontoComercial || 0;
+      var desconto = chequeCasaPaulista + descontoComercial;
       // Saldo "cru", sem travar em zero: se ato + financiamento + subsídio +
       // FGTS + desconto já cobrem (ou passam) o valor da unidade, o
       // excedente não é "saldo negativo" — é financiamento aprovado que não
@@ -1959,6 +1969,7 @@
         T: T, mesesPos: mesesPos, mesesPosAjustado: mesesPosAjustado,
         mesesPreEfetivo: mesesPreEfetivo, mesesPreAjustado: mesesPreAjustado,
         descontoPrazo: descontoAuto, descontoTotal: desconto, saldoTotal: saldoTotal, saldoBruto: saldoBruto,
+        chequeCasaPaulista: chequeCasaPaulista, descontoComercial: descontoComercial,
         atoCalculado: atoCalculado, atoInformado: atoInformado,
         parcelaPre: parcelaPre, capped: capped, saldoResidual: saldoResidual,
         valorCobertoPelaPre: valorCobertoPelaPre,
@@ -2018,6 +2029,7 @@
       fgts: parseFloat(document.getElementById('sFgts').value)||0,
       ato: parseFloat(document.getElementById('sAto').value)||0,
       desconto: parseFloat(document.getElementById('sDesconto').value)||0,
+      descontoComercial: parseFloat(document.getElementById('sDescontoComercial').value)||0,
       jurosAM: 0.75,
       isImobiliaria: document.getElementById('sImobiliariaFlag').value === 'sim',
       imobiliariaNome: document.getElementById('sImobiliariaFlag').value === 'sim'
@@ -2111,6 +2123,7 @@
     document.getElementById('sFgts').value = '0';
     document.getElementById('sAto').value = '0';
     document.getElementById('sDesconto').value = '0';
+    document.getElementById('sDescontoComercial').value = '0';
     document.getElementById('sImobiliariaFlag').value = 'nao';
     document.getElementById('sImobiliariaNome').value = '';
     document.getElementById('sImobiliariaNomeWrap').hidden = true;
@@ -2155,6 +2168,7 @@
     document.getElementById('sFgts').value = inp.fgts || 0;
     document.getElementById('sAto').value = inp.ato || 0;
     document.getElementById('sDesconto').value = inp.desconto || 0;
+    document.getElementById('sDescontoComercial').value = inp.descontoComercial || 0;
     document.getElementById('sImobiliariaFlag').value = inp.isImobiliaria ? 'sim' : 'nao';
     document.getElementById('sImobiliariaNomeWrap').hidden = !inp.isImobiliaria;
     document.getElementById('sImobiliariaNome').value = inp.imobiliariaNome || '';
@@ -2280,14 +2294,17 @@
   // no prazo que de fato foram escolhidos (s.selectedTier/s.selectedTerm).
   // Usa a MESMA nomenclatura da coluna O (linhas 19 a 35) do fluxo em Excel
   // original — ATO, MENSAIS PRÉ, MENSAIS PÓS, FINANCIAMENTO, SUBSÍDIO,
-  // FGTS, BÔNUS — pra bater certinho com os campos do sistema de vendas.
-  // Todos os valores aqui são SEM JUROS (o principal dividido em partes
-  // iguais, igual ao bloco "Lançamento da venda" normal), nunca o valor com
-  // a curva de juros cobrada do cliente. O BÔNUS aqui soma o bônus por
-  // avaliação (s.bonus) com o desconto negociado manualmente no passo 1
-  // (sp.descontoTotal) — é assim que o fluxo original soma as duas coisas
-  // numa linha só (célula O33 = M33+M35) pra lançar como um valor único no
-  // sistema.
+  // FGTS — pra bater certinho com os campos do sistema de vendas. Todos os
+  // valores aqui são SEM JUROS (o principal dividido em partes iguais,
+  // igual ao bloco "Lançamento da venda" normal), nunca o valor com a curva
+  // de juros cobrada do cliente.
+  // CHEQUE CASA PAULISTA, DESCONTO NEGOCIADO/APROVAÇÃO COMERCIAL e BÔNUS
+  // entram como TRÊS linhas separadas (não mais somadas numa única "BÔNUS",
+  // como no fluxo em Excel original — célula O33 = M33+M35) — pedido
+  // explícito do usuário: o sistema precisa sempre receber a composição
+  // total do valor de avaliação Caixa (avaliação = valor de venda + bônus),
+  // e cada um desses três valores tem uma origem e, no caso do desconto
+  // negociado/aprovação comercial, uma aprovação individual diferentes.
   function renderLancamentoAprovadoBlock(sp, s){
     var eff = effectiveSubPlan(sp, s);
     var manual = !!sp.ajusteManual;
@@ -2297,7 +2314,6 @@
     var mesesPosLanc = eff.mesesPos;
     var parcelaPosSemJurosLanc = manual ? am.parcelaPosSemJurosNeg : sp.parcelaPosSemJuros;
     var financiamentoLanc = sp.financiamentoAjustado;
-    var bonusLanc = (s.bonus||0) + (sp.descontoTotal||0);
     var rows = [];
     if (eff.ato>0) rows.push(['ATO', eff.ato]);
     if (eff.valorCobertoPelaPre>0) rows.push(['MENSAIS PRÉ ('+mesesPreLanc+'x)', parcelaPreSemJurosLanc]);
@@ -2305,15 +2321,17 @@
     if (financiamentoLanc>0) rows.push(['FINANCIAMENTO', financiamentoLanc]);
     if (s.subsidio>0) rows.push(['SUBSÍDIO', s.subsidio]);
     if (s.fgts>0) rows.push(['FGTS', s.fgts]);
-    if (bonusLanc>0) rows.push(['BÔNUS', bonusLanc]);
+    if (sp.chequeCasaPaulista>0) rows.push(['CHEQUE CASA PAULISTA', sp.chequeCasaPaulista]);
+    if (sp.descontoComercial>0) rows.push(['DESCONTO NEGOCIADO / APROVAÇÃO COMERCIAL', sp.descontoComercial]);
+    if (s.bonus>0) rows.push(['BÔNUS', s.bonus]);
     if (!rows.length) return '';
     return '<div class="scen-plan lancamento-sistema">'
-      + '<div class="lancamento-title">Valores para lançar no sistema <span>(aprovado — sem juros)</span></div>'
+      + '<div class="lancamento-title">Valores para lançar no sistema <span>(aprovado — sem juros, composição total da avaliação Caixa)</span></div>'
       + rows.map(function(r){ return '<div class="scen-plan-row"><span class="k">'+r[0]+'</span><span class="v">'+fmtMoney(r[1])+'</span></div>'; }).join('')
       + '</div>';
   }
 
-  function renderSubPlan(sp, s, hasRenda, showLancamento, ajusteCtx, showLancSistema){
+  function renderSubPlan(sp, s, hasRenda, showLancamento, ajusteCtx, showLancSistema, descontoComercialAprovado){
     var mesesPre = s.mesesPre;
     var eff = effectiveSubPlan(sp, s);
     var warn = eff.overPre || eff.overPos;
@@ -2338,6 +2356,19 @@
     var atoRowHtml = editable
       ? '<div class="scen-plan-row sub editable"><span class="k">(−) '+atoLabel+'</span><span class="v"><input type="number" class="aj-ato" min="0" step="10" value="'+(eff.ato?eff.ato.toFixed(2):'0')+'"></span></div>'
       : (eff.ato>0 ? '<div class="scen-plan-row sub"><span class="k">(−) '+atoLabel+'</span><span class="v">'+fmtMoney(eff.ato)+'</span></div>' : '');
+    // "Cheque Casa Paulista" (era "Bônus/desconto negociado") e "Desconto
+    // negociado/Aprovação comercial" aparecem como duas linhas separadas —
+    // o segundo, quando exibido no Histórico (showLancamento), carrega
+    // também o status da aprovação individual dessa linha pelo coordenador
+    // (ver renderAprovacaoActions/setDescontoComercialAprovado).
+    var descontoComercialBadgeHtml = '';
+    if (showLancamento && sp.descontoComercial>0){
+      descontoComercialBadgeHtml = descontoComercialAprovado
+        ? ' <em class="badge-manual" style="color:var(--st-vnd);">visto e aprovado</em>'
+        : ' <em class="badge-manual" style="color:var(--st-apr);">pendente de aprovação</em>';
+    }
+    var descontoRowsHtml = (sp.chequeCasaPaulista>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Cheque Casa Paulista</span><span class="v">'+fmtMoney(sp.chequeCasaPaulista)+'</span></div>' : '')
+      +   (sp.descontoComercial>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Desconto negociado / Aprovação comercial'+descontoComercialBadgeHtml+'</span><span class="v">'+fmtMoney(sp.descontoComercial)+'</span></div>' : '');
     var subtracaoHtml = '<div class="scen-plan subtracao">'
       +   avaliacaoRowHtml
       + '<div class="scen-plan-row valor-base"><span class="k">Valor de venda</span><span class="v">'+fmtMoney(s.unit.valor)+'</span></div>'
@@ -2345,7 +2376,7 @@
       +   (s.subsidio>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Subsídio</span><span class="v">'+fmtMoney(s.subsidio)+'</span></div>' : '')
       +   (s.fgts>0 ? '<div class="scen-plan-row sub"><span class="k">(−) FGTS</span><span class="v">'+fmtMoney(s.fgts)+'</span></div>' : '')
       +   atoRowHtml
-      +   (sp.descontoTotal>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Desconto</span><span class="v">'+fmtMoney(sp.descontoTotal)+'</span></div>' : '')
+      +   descontoRowsHtml
       + '<div class="scen-plan-row total"><span class="k">Saldo Devedor</span><span class="v">'+fmtMoney(eff.saldoDevedor)+'</span></div>'
       + '</div>';
     var reducaoHtml = sp.reducaoFinanciamento
@@ -2466,7 +2497,7 @@
         +   (s.subsidio>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Subsídio</span><span class="v">'+fmtMoney(s.subsidio)+'</span></div>' : '')
         +   (s.fgts>0 ? '<div class="scen-plan-row sub"><span class="k">(−) FGTS</span><span class="v">'+fmtMoney(s.fgts)+'</span></div>' : '')
         +   '<div class="scen-plan-row sub"><span class="k">(−) Entrada'+(sp.alt.atoExtra>1e-6?' <em class="badge-manual">inclui ajuste</em>':'')+'</span><span class="v">'+fmtMoney(sp.alt.ato)+'</span></div>'
-        +   (sp.descontoTotal>0 ? '<div class="scen-plan-row sub"><span class="k">(−) Desconto</span><span class="v">'+fmtMoney(sp.descontoTotal)+'</span></div>' : '')
+        +   descontoRowsHtml
         +   '<div class="scen-plan-row total"><span class="k">Saldo Devedor</span><span class="v">'+fmtMoney(sp.alt.saldoDevedor)+'</span></div>'
         + '</div>'
         + '<div class="scen-plan">'
@@ -2549,7 +2580,7 @@
     // aqui, uma vez só, fora da subtração.
     var subHtml = s.subPlans.map(function(sp, spIdx){
       var ajusteCtx = (opts.showAjuste && opts.scenIdx!=null) ? {scenIdx: opts.scenIdx, spIdx: spIdx} : null;
-      return renderSubPlan(sp, s, hasRenda, opts.showLancamento, ajusteCtx, showLancSistema);
+      return renderSubPlan(sp, s, hasRenda, opts.showLancamento, ajusteCtx, showLancSistema, opts.descontoComercialAprovado);
     }).join('');
     var parcelaCefHtml = s.parcelaCefValor>0
       ? '<div class="scen-plan-row"><span class="k">Parcela pós banco (CEF)</span><span class="v">'+fmtMoney(s.parcelaCefValor)+'</span></div>'
@@ -2560,9 +2591,13 @@
     // Bônus total (avaliação CEF − valor de venda): só aparece no Histórico/
     // Planner (opts.showLancamento), nunca no Simulador ao vivo — pedido
     // explícito do usuário. Não varia por prazo, então entra uma vez só por
-    // card, igual à parcela pós CEF.
-    var bonusHtml = (opts.showLancamento && s.bonus > 0)
-      ? '<div class="scen-plan lancamento"><div class="lancamento-title">Bônus total <span>(avaliação − valor de venda)</span></div><div class="scen-plan-row"><span class="k">Bônus</span><span class="v">'+fmtMoney(s.bonus)+'</span></div></div>'
+    // card, igual à parcela pós CEF. Aparece em QUALQUER tela (Simulador ao
+    // vivo incluído) — pedido explícito do usuário: esse Bônus é a
+    // diferença real entre a avaliação Caixa e o valor de venda, e precisa
+    // sempre compor o valor lançado no sistema junto com os demais valores
+    // (ver renderLancamentoAprovadoBlock).
+    var bonusHtml = (s.bonus > 0)
+      ? '<div class="scen-plan lancamento"><div class="lancamento-title">Bônus <span>(diferença entre a avaliação Caixa e o valor de venda — compõe o valor a lançar no sistema)</span></div><div class="scen-plan-row"><span class="k">Bônus</span><span class="v">'+fmtMoney(s.bonus)+'</span></div></div>'
       : '';
     // Flag "enviar para aprovação": marca qual das opções geradas é a que
     // deve ir para aprovação ao salvar. Só aparece no Simulador ao vivo
@@ -2610,8 +2645,8 @@
       +   '<div class="scen-attrs">'+attrChips(s.unit)+'</div>'
       +   vbAlertHtml
       +   parcelaCefHtml
-      +   bonusHtml
       +   '<div class="subplan-grid">'+subHtml+'</div>'
+      +   bonusHtml
       + '</div></div>';
   }
 
@@ -3250,8 +3285,13 @@
         // só mostram a flag em azul (neutro), sem herdar aprovado/recusado
         // de uma decisão que é sobre a rodada nova.
         var aprovStatusRodada = isCurrentRound ? (s._statusAprovacao || 'nao_enviado') : 'nao_enviado';
+        // A aprovação individual do "Desconto negociado/Aprovação comercial"
+        // só é uma pendência real na rodada atual — rodadas antigas (já
+        // substituídas por uma ressimulação) são só consulta, por isso
+        // aparecem sempre como resolvidas, sem o selo "pendente de aprovação".
+        var descontoComercialAprovadoRodada = isCurrentRound ? !!s.descontoComercialAprovado : true;
         var scenariosHtml = (r.scenarios||[]).map(function(sc){
-          return renderScenarioCard(sc, {showLancamento:true, hasRenda: rendaDaRodada, selectedTier: r.selectedTier, aprovStatus: aprovStatusRodada});
+          return renderScenarioCard(sc, {showLancamento:true, hasRenda: rendaDaRodada, selectedTier: r.selectedTier, aprovStatus: aprovStatusRodada, descontoComercialAprovado: descontoComercialAprovadoRodada});
         }).join('');
         var rd = new Date(r.createdAt);
         var quando = rd.toLocaleDateString('pt-BR')+' '+rd.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -3366,10 +3406,30 @@
     var bg = st==='recusado' ? 'var(--st-apr-soft)' : (st==='aprovado' ? 'var(--st-vnd-soft)' : 'var(--st-apr-soft)');
     return '<span class="pill" style="color:'+c+'; background:'+bg+'"><i></i>'+esc(label)+'</span>';
   }
+  // Aprovação INDIVIDUAL da linha "Desconto negociado/Aprovação comercial"
+  // — pedido explícito do usuário: diferente da aprovação da venda como um
+  // todo (status_aprovacao, acima), essa marca especificamente que ALGUÉM
+  // (coordenador/administrador) viu e aprovou esse desconto em particular.
+  // Guardado em dados.descontoComercialAprovado (jsonb, sem migração de
+  // schema) — ver setDescontoComercialAprovado. Só aparece quando a
+  // simulação atual de fato tem esse desconto preenchido (inputs.descontoComercial).
+  function renderDescontoComercialAprovacao(s){
+    var valor = s.inputs && s.inputs.descontoComercial;
+    if (!valor || valor <= 0) return '';
+    var aprovado = !!s.descontoComercialAprovado;
+    var podeDecidir = CURRENT_PROFILE && (CURRENT_PROFILE.papel === 'coordenador_vendas' || CURRENT_PROFILE.papel === 'administrador');
+    var badge = aprovado
+      ? '<span class="pill" style="color:var(--st-vnd); background:var(--st-vnd-soft)"><i></i>Visto e aprovado</span>'
+      : '<span class="pill" style="color:var(--st-apr); background:var(--st-apr-soft)"><i></i>Pendente de aprovação</span>';
+    var action = podeDecidir
+      ? '<button type="button" class="btn btn-ghost desconto-com-toggle-btn" data-id="'+esc(s.id)+'" data-novo="'+(aprovado?'0':'1')+'">'+(aprovado?'Desfazer aprovação':'Aprovar este desconto')+'</button>'
+      : '';
+    return '<div class="aprov-desconto-comercial"><span class="hist-meta">Desconto negociado / Aprovação comercial ('+fmtMoney(valor)+')</span> '+badge+' '+action+'</div>';
+  }
   function renderAprovacaoActions(s){
     if (!CURRENT_PROFILE) return '';
     var st = s._statusAprovacao || 'nao_enviado';
-    var html = '';
+    var html = renderDescontoComercialAprovacao(s);
     if (CURRENT_PROFILE.papel === 'corretor_interno' && s._corretorId === CURRENT_PROFILE.id && (st === 'nao_enviado' || st === 'recusado')){
       html += '<button type="button" class="btn btn-ghost aprov-enviar-btn" data-id="'+esc(s.id)+'">Enviar para aprovação</button>';
     }
@@ -3412,6 +3472,12 @@
       showToast(aprovado ? 'Simulação aprovada.' : 'Recusa enviada para o corretor.');
     }).catch(function(e){ console.error(e); showToast('Não foi possível registrar a decisão.'); });
   }
+  function setDescontoComercialAprovado(id, aprovado){
+    if (!db) return;
+    db.collection('simulacoes').doc(id).update({descontoComercialAprovado: aprovado}).then(function(){
+      showToast(aprovado ? 'Desconto negociado/Aprovação comercial marcado como visto e aprovado.' : 'Aprovação do desconto negociado desfeita.');
+    }).catch(function(e){ console.error(e); showToast('Não foi possível registrar a aprovação do desconto.'); });
+  }
   function wireAprovacaoBlocks(container){
     container.querySelectorAll('.aprov-enviar-btn').forEach(function(btn){
       btn.addEventListener('click', function(e){
@@ -3433,6 +3499,13 @@
       btn.addEventListener('click', function(e){
         e.stopPropagation();
         decidirAprovacao(btn.getAttribute('data-id'), true, '');
+      });
+      btn.addEventListener('dragstart', function(e){ e.preventDefault(); e.stopPropagation(); });
+    });
+    container.querySelectorAll('.desconto-com-toggle-btn').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        setDescontoComercialAprovado(btn.getAttribute('data-id'), btn.getAttribute('data-novo') === '1');
       });
       btn.addEventListener('dragstart', function(e){ e.preventDefault(); e.stopPropagation(); });
     });

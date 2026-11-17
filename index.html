@@ -2004,16 +2004,22 @@
       // renderSubPlan/avaliacaoEfetiva. Sem preenchimento manual, cai pra
       // avaliação da tabela.
       avaliacaoInformada: inputs.avaliacao || 0,
-      // Bônus total (pra lançamento no sistema, só aparece no histórico — ver
-      // renderScenarioCard): avaliação do CEF menos o valor de venda desta
-      // unidade. Não tem célula obrigatória pra avaliação (o campo é
-      // opcional no passo 1), então sem ela o bônus fica zero e a linha nem
-      // aparece. Existe em QUALQUER empreendimento (confirmado no fluxo em
+      // Bônus (compõe o valor a lançar no sistema, aparece no final de
+      // qualquer tela — ver renderScenarioCard/renderLancamentoAprovadoBlock):
+      // avaliação do CEF menos o valor de venda desta unidade. Usa a MESMA
+      // prioridade da linha "Avaliação" exibida no card (ver
+      // renderSubPlan/avaliacaoEfetiva) — avaliação informada manualmente no
+      // passo 1 tem prioridade; sem ela, cai pra avaliação já cadastrada na
+      // tabela de preços da unidade (unit.avaliacao). Antes o bônus só
+      // considerava a avaliação informada manualmente, então ficava zerado
+      // (linha some) mesmo quando o card já mostrava uma Avaliação vinda da
+      // tabela de preços — corrigido pra sempre bater com o que aparece na
+      // tela. Existe em QUALQUER empreendimento (confirmado no fluxo em
       // Excel de Casas Maisparque também) — é só um valor de
       // lançamento/bookkeeping, nunca reduz o saldo que o cliente financia
       // (isso é feito só pelo desconto manual negociado, ver
       // descontoAutomatico mais acima).
-      bonus: Math.max(0, (inputs.avaliacao||0) - unit.valor)
+      bonus: Math.max(0, ((inputs.avaliacao > 0 ? inputs.avaliacao : (unit.avaliacao || 0))) - unit.valor)
     };
   }
 

@@ -3589,16 +3589,24 @@
     var meuId = CURRENT_PROFILE && CURRENT_PROFILE.id;
     tbody.innerHTML = list.map(function(u){
       var nomeCell = esc(u.nome||'—') + (u.principal ? ' <span class="pill" style="background:var(--accent-soft); color:var(--accent-dark); margin-left:6px;">Principal</span>' : '');
-      var acoesCell;
+      var papelCtrl;
       if (u.principal || u.id === meuId){
-        acoesCell = '<span style="color:var(--text-muted); font-size:12px;">—</span>';
+        papelCtrl = '';
       } else {
         var opts = ['corretor_interno','coordenador_vendas','administrador'].map(function(p){
           return '<option value="'+p+'"'+(p===u.papel?' selected':'')+'>'+esc(PAPEL_LABELS[p])+'</option>';
         }).join('');
-        acoesCell = '<select class="usr-papel-sel" data-id="'+esc(u.id)+'" style="margin-right:6px;">'+opts+'</select>'
+        papelCtrl = '<select class="usr-papel-sel" data-id="'+esc(u.id)+'" style="margin-right:6px;">'+opts+'</select>'
           + '<button class="btn btn-ghost usr-papel-save" type="button" data-id="'+esc(u.id)+'">Salvar</button>';
       }
+      // Trocar senha fica disponível pra qualquer usuário (inclusive o
+      // principal) -- diferente da edição de papel, trocar senha não muda
+      // permissão nenhuma, então não precisa das mesmas travas.
+      var senhaCtrl = '<span style="display:inline-flex; gap:6px; align-items:center; margin-left:'+(papelCtrl?'10px':'0')+';">'
+        + '<input type="password" class="usr-pwd-input" data-id="'+esc(u.id)+'" placeholder="Nova senha (mín. 8)" minlength="8" style="width:132px; padding:5px 7px; border:1px solid var(--border); border-radius:7px; background:var(--bg); color:var(--text); font-size:12.5px;">'
+        + '<button class="btn btn-ghost usr-pwd-save" type="button" data-id="'+esc(u.id)+'">Trocar senha</button>'
+        + '</span>';
+      var acoesCell = papelCtrl + senhaCtrl;
       return '<tr><td>'+nomeCell+'</td><td>'+esc(u.email||'—')+'</td><td>'+esc(PAPEL_LABELS[u.papel]||u.papel)+'</td><td>'+acoesCell+'</td></tr>';
     }).join('');
     tbody.querySelectorAll('.usr-papel-save').forEach(function(btn){
@@ -3620,6 +3628,51 @@
           }
           showToast('Papel atualizado.');
           loadUsuarios();
+        });
+      });
+    });
+    /* Trocar senha: nunca é feito direto pelo cliente (o app não tem a
+     * service_role key) -- sempre via a Edge Function admin-create-user,
+     * que já verifica que quem está chamando é administrador, agora com
+     * action:'reset_password' pra trocar a senha de um usuário existente
+     * ao invés de criar um novo. */
+    tbody.querySelectorAll('.usr-pwd-save').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var input = tbody.querySelector('input.usr-pwd-input[data-id="'+id+'"]');
+        if (!input || !supa) return;
+        var novaSenha = input.value;
+        if (!novaSenha || novaSenha.length < 8){
+          showToast('A nova senha precisa ter pelo menos 8 caracteres.');
+          return;
+        }
+        var prevText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Trocando…';
+        supa.auth.getSession().then(function(res){
+          var token = res.data && res.data.session && res.data.session.access_token;
+          if (!token) throw new Error('sem sessão ativa');
+          return fetch(SUPABASE_URL + '/functions/v1/admin-create-user', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+            body: JSON.stringify({ action:'reset_password', user_id:id, senha:novaSenha })
+          });
+        }).then(function(resp){
+          return resp.json().catch(function(){ return {}; }).then(function(body){ return {ok: resp.ok, body: body}; });
+        }).then(function(r){
+          btn.disabled = false;
+          btn.textContent = prevText;
+          if (!r.ok || !r.body || !r.body.ok){
+            showToast('Não foi possível trocar a senha: ' + ((r.body && r.body.message) || 'tente novamente') + '.');
+            return;
+          }
+          input.value = '';
+          showToast('Senha atualizada.');
+        }).catch(function(err){
+          console.error(err);
+          btn.disabled = false;
+          btn.textContent = prevText;
+          showToast('Não foi possível trocar a senha agora.');
         });
       });
     });

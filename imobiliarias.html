@@ -1,0 +1,279 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<title>Imobiliárias parceiras &middot; Portal Emais Residências</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+  :root{
+    --bg:#faf9fc; --surface:#ffffff; --surface-alt:#f2eef8; --border:#e2dcec; --border-soft:#ece7f4;
+    --text:#2a2433; --text-muted:#6d6480; --text-faint:#9891a8;
+    --shadow:0 1px 2px rgba(42,36,51,.05), 0 8px 24px -12px rgba(42,36,51,.18);
+    --accent:#6e6096; --accent-dark:#4d4269; --accent-soft:#ece6f6;
+    --st-apr:#b6791f; --st-apr-soft:#f7ecd6;
+    --good:#1f8a5f; --good-soft:#dcf2e9; --danger:#c23434; --danger-soft:#f7dede;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#150f1d; --surface:#1e1829; --surface-alt:#251e33; --border:#382c4a; --border-soft:#2b2338;
+      --text:#f1ecf9; --text-muted:#b3a7c9; --text-faint:#6f6486;
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.6);
+      --accent:#a97fb8; --accent-dark:#d4b6de; --accent-soft:#332943;
+      --st-apr:#f0a94f; --st-apr-soft:#3a2a12;
+      --good:#4ed8a0; --good-soft:#0f2c22; --danger:#f28b8b; --danger-soft:#3a1414;
+    }
+  }
+  *{box-sizing:border-box;}
+  html{color-scheme:light dark;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif; font-size:14px; line-height:1.45;}
+  h1,h2,h3{font-family:'Archivo', ui-sans-serif, system-ui, sans-serif; text-wrap:balance; margin:0;}
+  button, select, input, textarea{font-family:inherit; font-size:inherit; color:inherit;}
+  a{color:inherit;}
+  .shell{max-width:980px; margin:0 auto; padding:20px 20px 64px;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0 18px;}
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand-mark{width:34px; height:34px; flex:none;}
+  .brand-text h1{font-size:18px; font-weight:800;}
+  .brand-text p{margin:1px 0 0; font-size:12.5px; color:var(--text-muted);}
+  .topnav{display:flex; align-items:center; gap:12px;}
+  .topnav a{font-size:12.5px; color:var(--text-muted); text-decoration:none; font-weight:600;}
+  .user-chip{display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border-soft); border-radius:99px; padding:6px 8px 6px 14px; box-shadow:var(--shadow); font-size:12.5px;}
+  .user-chip button{border:none; background:var(--surface-alt); color:var(--text-muted); border-radius:99px; padding:4px 10px; cursor:pointer; font-size:11.5px; font-weight:500;}
+
+  .section-title{font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); margin:26px 0 12px;}
+  .req-card{background:var(--surface); border:1px solid var(--border-soft); border-radius:14px; box-shadow:var(--shadow); padding:18px 20px; margin-bottom:14px;}
+  .req-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .req-head h3{font-size:15px; font-weight:700;}
+  .req-head .when{font-size:11.5px; color:var(--text-faint);}
+  .req-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:4px 20px; margin:10px 0; font-size:12.5px;}
+  @media (max-width:640px){ .req-grid{grid-template-columns:1fr;} }
+  .req-grid .k{color:var(--text-muted);}
+  .req-grid .v{font-weight:600;}
+  .doc-link{display:inline-block; margin-top:6px; font-size:12px; font-weight:700; color:var(--accent-dark); text-decoration:underline; cursor:pointer;}
+  .obs-field{width:100%; min-height:50px; border:1px solid var(--border-soft); border-radius:8px; padding:8px 10px; background:var(--bg); color:var(--text); font-family:inherit; font-size:12.5px; resize:vertical; margin-top:10px; box-sizing:border-box;}
+  .approve-row{display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .approve-row input{border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:var(--bg); color:var(--text); font-size:12.5px;}
+  .btn{border:none; border-radius:8px; padding:9px 16px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:'Archivo',sans-serif;}
+  .btn-good{background:var(--good); color:#fff;}
+  .btn-danger{background:var(--danger); color:#fff;}
+  .btn-ghost{background:var(--surface-alt); color:var(--text);}
+  .btn:disabled{opacity:.5; cursor:default;}
+  .pill{display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:99px; font-size:11px; font-weight:600;}
+  .pill.pendente{background:var(--st-apr-soft); color:var(--st-apr);}
+  .pill.aprovado{background:var(--good-soft); color:var(--good);}
+  .pill.recusado{background:var(--danger-soft); color:var(--danger);}
+  .empty-state{color:var(--text-muted); font-size:13px; padding:30px 0; text-align:center; background:var(--surface); border:1px dashed var(--border); border-radius:14px;}
+  .msg-inline{font-size:11.5px; margin-top:6px; color:var(--text-muted);}
+  .msg-inline.err{color:var(--danger); font-weight:600;}
+  .gate{max-width:420px; margin:14vh auto; text-align:center; color:var(--text-muted); font-size:13px;}
+</style>
+
+<div class="shell" id="appShell" hidden>
+  <div class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <rect x="2" y="2" width="16" height="16" rx="3" fill="#6e6096"/>
+        <rect x="22" y="2" width="16" height="16" rx="3" fill="#c99f2e"/>
+        <rect x="2" y="22" width="16" height="16" rx="3" fill="#9a7fb0"/>
+        <rect x="22" y="22" width="16" height="16" rx="3" fill="#4d4269"/>
+      </svg>
+      <div class="brand-text">
+        <h1>Imobiliárias parceiras</h1>
+        <p>Aprove ou recuse solicitações de parceria</p>
+      </div>
+    </div>
+    <div class="topnav">
+      <a href="index.html">&larr; Portal</a>
+      <div class="user-chip">
+        <b id="userLabel">&mdash;</b>
+        <button id="logoutBtn" type="button">sair</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Solicitações pendentes</div>
+  <div id="pendentesList"></div>
+  <div class="empty-state" id="pendentesEmpty" hidden>Nenhuma solicitação pendente no momento.</div>
+
+  <div class="section-title">Decisões anteriores</div>
+  <div id="decididasList"></div>
+  <div class="empty-state" id="decididasEmpty" hidden>Nenhuma decisão registrada ainda.</div>
+</div>
+
+<div class="gate" id="gateMsg" hidden></div>
+
+<script>
+  var SUPABASE_URL = 'https://nudmdwxnbkowjnuhovcv.supabase.co';
+  var SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_gPvgjOlCtNX-QuAiDgK9rg_lSsTrVbx';
+  var supa = (typeof supabase !== 'undefined') ? supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
+  var CURRENT_PROFILE = null;
+
+  var esc = function(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); };
+  var fmtDate = function(iso){ try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return ''; } };
+
+  function showGate(msg){
+    document.getElementById('appShell').hidden = true;
+    var g = document.getElementById('gateMsg');
+    g.hidden = false;
+    g.innerHTML = msg;
+  }
+
+  function dadosBancariosLine(db){
+    db = db || {};
+    return esc(db.banco||'—') + ' &middot; ag. ' + esc(db.agencia||'—') + ' &middot; cc ' + esc(db.conta||'—') + ' (' + esc(db.tipo_conta||'—') + ')<br>titular: ' + esc(db.titular||'—') + ' &middot; ' + esc(db.titular_documento||'—');
+  }
+
+  function renderReqCard(row, isPendente){
+    var statusLabel = {pendente:'Pendente', aprovado:'Aprovado', recusado:'Recusado'}[row.status] || row.status;
+    var html = '<div class="req-card" data-id="'+esc(row.id)+'">'
+      + '<div class="req-head"><h3>'+esc(row.razao_social)+'</h3><span class="when">'+fmtDate(row.created_at)+'</span></div>'
+      + '<span class="pill '+esc(row.status)+'">'+statusLabel+'</span>'
+      + '<div class="req-grid">'
+      + '<div><span class="k">CNPJ:</span> <span class="v">'+esc(row.cnpj)+'</span></div>'
+      + '<div><span class="k">Responsável:</span> <span class="v">'+esc(row.responsavel_nome)+'</span></div>'
+      + '<div><span class="k">Telefone:</span> <span class="v">'+esc(row.telefone)+'</span></div>'
+      + '<div><span class="k">E-mail:</span> <span class="v">'+esc(row.email)+'</span></div>'
+      + '</div>'
+      + '<div style="font-size:12px; color:var(--text-muted);">'+dadosBancariosLine(row.dados_bancarios)+'</div>'
+      + '<span class="doc-link" data-path="'+esc(row.contrato_social_path||'')+'">Ver contrato social anexado</span>';
+
+    if (isPendente){
+      html += '<textarea class="obs-field" placeholder="Observação da aprovação/recusa (vai junto no e-mail para admcomercial@emais.com)" data-obs="'+esc(row.id)+'"></textarea>'
+        + '<div class="approve-row">'
+        + '<input type="password" placeholder="Senha inicial de acesso (mín. 8 caracteres)" data-senha="'+esc(row.id)+'" style="min-width:220px;">'
+        + '<button class="btn btn-good" type="button" data-aprovar="'+esc(row.id)+'">Aprovar e liberar acesso</button>'
+        + '<button class="btn btn-danger" type="button" data-recusar="'+esc(row.id)+'">Recusar</button>'
+        + '</div>'
+        + '<p class="msg-inline" data-msg="'+esc(row.id)+'"></p>';
+    } else if (row.observacao_aprovacao) {
+      html += '<p style="font-size:12px; color:var(--text-muted); margin-top:10px;"><b>Observação:</b> '+esc(row.observacao_aprovacao)+'</p>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function wireDocLinks(container){
+    container.querySelectorAll('.doc-link').forEach(function(a){
+      a.addEventListener('click', function(){
+        var path = a.getAttribute('data-path');
+        if (!path) return;
+        a.textContent = 'Abrindo…';
+        supa.storage.from('imobiliarias-docs').createSignedUrl(path, 600).then(function(res){
+          a.textContent = 'Ver contrato social anexado';
+          if (res.error || !res.data){ alert('Não foi possível abrir o documento agora.'); return; }
+          window.open(res.data.signedUrl, '_blank');
+        });
+      });
+    });
+  }
+
+  function wirePendentes(container){
+    container.querySelectorAll('[data-recusar]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-recusar');
+        var card = container.querySelector('.req-card[data-id="'+id+'"]');
+        var obs = card.querySelector('[data-obs]').value.trim();
+        var msgEl = card.querySelector('[data-msg]');
+        btn.disabled = true;
+        supa.from('imobiliarias').update({
+          status: 'recusado', observacao_aprovacao: obs || null, aprovado_por: CURRENT_PROFILE.id, aprovado_em: new Date().toISOString()
+        }).eq('id', id).then(function(res){
+          if (res.error){ btn.disabled=false; msgEl.textContent='Não foi possível recusar agora.'; msgEl.classList.add('err'); return; }
+          loadRequests();
+        });
+      });
+    });
+    container.querySelectorAll('[data-aprovar]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-aprovar');
+        var card = container.querySelector('.req-card[data-id="'+id+'"]');
+        var obs = card.querySelector('[data-obs]').value.trim();
+        var senha = card.querySelector('[data-senha]').value;
+        var msgEl = card.querySelector('[data-msg]');
+        msgEl.classList.remove('err');
+        if (!senha || senha.length < 8){
+          msgEl.textContent = 'Defina uma senha inicial de acesso (mínimo 8 caracteres) antes de aprovar.';
+          msgEl.classList.add('err');
+          return;
+        }
+        btn.disabled = true;
+        msgEl.textContent = 'Aprovando e criando acesso…';
+        supa.from('imobiliarias').select('*').eq('id', id).single().then(function(res){
+          if (res.error || !res.data) throw res.error || new Error('not_found');
+          var row = res.data;
+          return supa.auth.getSession().then(function(sres){
+            var token = sres.data && sres.data.session && sres.data.session.access_token;
+            if (!token) throw new Error('sem sessão ativa');
+            return fetch(SUPABASE_URL + '/functions/v1/admin-create-user', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+token},
+              body: JSON.stringify({email: row.email, senha: senha, nome: row.responsavel_nome, papel: 'imobiliaria', imobiliaria_id: row.id})
+            });
+          });
+        }).then(function(resp){
+          return resp.json().catch(function(){ return {}; }).then(function(body){ return {ok: resp.ok, body: body}; });
+        }).then(function(r){
+          if (!r.ok || !r.body || !r.body.ok){
+            throw new Error((r.body && r.body.message) || 'Falha ao criar o acesso da imobiliária.');
+          }
+          return supa.from('imobiliarias').update({
+            status: 'aprovado', observacao_aprovacao: obs || null, aprovado_por: CURRENT_PROFILE.id, aprovado_em: new Date().toISOString()
+          }).eq('id', id);
+        }).then(function(res){
+          if (res.error) throw res.error;
+          loadRequests();
+        }).catch(function(err){
+          console.error(err);
+          btn.disabled = false;
+          msgEl.textContent = err.message || 'Não foi possível aprovar agora.';
+          msgEl.classList.add('err');
+        });
+      });
+    });
+  }
+
+  function loadRequests(){
+    supa.from('imobiliarias').select('*').order('created_at', {ascending:false}).then(function(res){
+      if (res.error){ console.error(res.error); return; }
+      var rows = res.data || [];
+      var pendentes = rows.filter(function(r){ return r.status === 'pendente'; });
+      var decididas = rows.filter(function(r){ return r.status !== 'pendente'; });
+
+      var pList = document.getElementById('pendentesList');
+      pList.innerHTML = pendentes.map(function(r){ return renderReqCard(r, true); }).join('');
+      document.getElementById('pendentesEmpty').hidden = pendentes.length > 0;
+      wireDocLinks(pList);
+      wirePendentes(pList);
+
+      var dList = document.getElementById('decididasList');
+      dList.innerHTML = decididas.map(function(r){ return renderReqCard(r, false); }).join('');
+      document.getElementById('decididasEmpty').hidden = decididas.length > 0;
+      wireDocLinks(dList);
+    });
+  }
+
+  function boot(){
+    if (!supa){ showGate('Não foi possível carregar a biblioteca de autenticação. Recarregue a página.'); return; }
+    supa.auth.getSession().then(function(res){
+      var session = res.data && res.data.session;
+      if (!session){
+        showGate('Você precisa entrar no <a href="index.html" style="color:var(--accent-dark); font-weight:700;">Portal Emais Residências</a> primeiro.');
+        return;
+      }
+      supa.from('profiles').select('id,email,nome,papel').eq('id', session.user.id).single().then(function(pres){
+        if (pres.error || !pres.data){ showGate('Não foi possível carregar seu perfil.'); return; }
+        CURRENT_PROFILE = pres.data;
+        if (CURRENT_PROFILE.papel !== 'administrador'){
+          showGate('Esse módulo é restrito a administradores. <a href="index.html" style="color:var(--accent-dark); font-weight:700;">Voltar ao Portal</a>.');
+          return;
+        }
+        document.getElementById('appShell').hidden = false;
+        document.getElementById('userLabel').textContent = CURRENT_PROFILE.nome || CURRENT_PROFILE.email;
+        loadRequests();
+      });
+    });
+  }
+  document.getElementById('logoutBtn').addEventListener('click', function(){
+    if (supa) supa.auth.signOut().then(function(){ window.location.href = 'index.html'; });
+  });
+  boot();
+</script>
+</body></html>

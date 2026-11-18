@@ -1,0 +1,203 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<title>Seja uma imobiliária parceira &middot; Emais Residências</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+  :root{
+    --bg:#faf9fc; --surface:#ffffff; --surface-alt:#f2eef8; --border:#e2dcec; --border-soft:#ece7f4;
+    --text:#2a2433; --text-muted:#6d6480; --text-faint:#9891a8;
+    --shadow:0 1px 2px rgba(42,36,51,.05), 0 8px 24px -12px rgba(42,36,51,.18);
+    --accent:#6e6096; --accent-dark:#4d4269; --accent-soft:#ece6f6;
+    --good:#1f8a5f; --good-soft:#dcf2e9; --danger:#c23434;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#150f1d; --surface:#1e1829; --surface-alt:#251e33; --border:#382c4a; --border-soft:#2b2338;
+      --text:#f1ecf9; --text-muted:#b3a7c9; --text-faint:#6f6486;
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.6);
+      --accent:#a97fb8; --accent-dark:#d4b6de; --accent-soft:#332943;
+      --good:#4ed8a0; --good-soft:#0f2c22; --danger:#f28b8b;
+    }
+  }
+  *{box-sizing:border-box;}
+  html{color-scheme:light dark;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif; font-size:14px; line-height:1.45;}
+  h1,h2,h3{font-family:'Archivo', ui-sans-serif, system-ui, sans-serif; text-wrap:balance; margin:0;}
+  button, select, input, textarea{font-family:inherit; font-size:inherit; color:inherit;}
+  a{color:inherit;}
+  .shell{max-width:760px; margin:0 auto; padding:28px 20px 64px;}
+  .brand{display:flex; align-items:center; gap:12px; margin-bottom:6px;}
+  .brand-mark{width:34px; height:34px; flex:none;}
+  .brand-text h1{font-size:18px; font-weight:800;}
+  .brand-text p{margin:1px 0 0; font-size:12.5px; color:var(--text-muted);}
+  .intro{margin:18px 0 26px; color:var(--text-muted); font-size:13px;}
+  .step-card{background:var(--surface); border:1px solid var(--border-soft); border-radius:14px; box-shadow:var(--shadow); padding:20px 22px; margin-bottom:16px;}
+  .step-card h2{font-size:14.5px; font-weight:700; margin-bottom:4px;}
+  .step-card .sub{font-size:12px; color:var(--text-muted); margin:0 0 14px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px 16px;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px 16px;}
+  @media (max-width:640px){ .grid2,.grid3{grid-template-columns:1fr;} }
+  .field{display:flex; flex-direction:column; gap:5px; margin-bottom:12px;}
+  .field label{font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em;}
+  .field label .opt{text-transform:none; font-weight:500; color:var(--text-faint);}
+  .field input, .field select{border:1px solid var(--border); border-radius:8px; padding:9px 10px; background:var(--bg); color:var(--text); width:100%;}
+  .field input:focus, .field select:focus{outline:none; border-color:var(--accent);}
+  .field input[type=file]{padding:7px;}
+  .hint{font-size:11px; color:var(--text-faint); margin-top:2px;}
+  .btn{border:none; border-radius:9px; padding:12px 20px; font-size:13.5px; font-weight:700; cursor:pointer; font-family:'Archivo',sans-serif;}
+  .btn-primary{background:var(--accent); color:#fff; width:100%;}
+  .btn-primary:hover{background:var(--accent-dark);}
+  .btn-primary:disabled{opacity:.5; cursor:default;}
+  .msg{font-size:12.5px; margin:10px 0 0; color:var(--text-muted);}
+  .msg.err{color:var(--danger); font-weight:600;}
+  .success-box{background:var(--good-soft); border:1px solid var(--good); border-radius:14px; padding:26px 24px; text-align:center;}
+  .success-box h2{color:var(--good); font-size:17px; margin-bottom:8px;}
+  .success-box p{margin:0; color:var(--text);}
+</style>
+
+<div class="shell">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="16" height="16" rx="3" fill="#6e6096"/>
+      <rect x="22" y="2" width="16" height="16" rx="3" fill="#c99f2e"/>
+      <rect x="2" y="22" width="16" height="16" rx="3" fill="#9a7fb0"/>
+      <rect x="22" y="22" width="16" height="16" rx="3" fill="#4d4269"/>
+    </svg>
+    <div class="brand-text">
+      <h1>Emais Residências</h1>
+      <p>Cadastro de imobiliária parceira</p>
+    </div>
+  </div>
+  <p class="intro">Preencha os dados abaixo para solicitar que sua imobiliária se torne uma parceira autorizada a vender os produtos Emais Residências. Nosso time vai analisar a solicitação e retornar pelo e-mail informado aqui.</p>
+
+  <form id="cadastroForm">
+    <div class="step-card">
+      <h2>Dados da imobiliária</h2>
+      <p class="sub">Informações básicas da empresa e do responsável pelo contato.</p>
+      <div class="grid2">
+        <div class="field"><label>Razão social</label><input type="text" id="fRazaoSocial" required></div>
+        <div class="field"><label>CNPJ</label><input type="text" id="fCnpj" placeholder="00.000.000/0000-00" required></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Nome do responsável</label><input type="text" id="fResponsavel" required></div>
+        <div class="field"><label>Telefone</label><input type="tel" id="fTelefone" placeholder="(00) 00000-0000" required></div>
+      </div>
+      <div class="field">
+        <label>E-mail da imobiliária</label>
+        <input type="email" id="fEmail" required>
+        <p class="hint">Esse e-mail vai ser usado pra criar o acesso da imobiliária ao sistema (se aprovada) e pra receber o retorno das análises de crédito enviadas.</p>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <h2>Contrato social</h2>
+      <p class="sub">Anexe o contrato social da empresa (PDF ou imagem).</p>
+      <div class="field">
+        <label>Arquivo do contrato social</label>
+        <input type="file" id="fContratoSocial" accept=".pdf,.jpg,.jpeg,.png" required>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <h2>Dados bancários</h2>
+      <p class="sub">Usados futuramente para pagamento de comissões.</p>
+      <div class="grid3">
+        <div class="field"><label>Banco</label><input type="text" id="fBanco" required></div>
+        <div class="field"><label>Agência</label><input type="text" id="fAgencia" required></div>
+        <div class="field"><label>Conta</label><input type="text" id="fConta" required></div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Tipo de conta</label>
+          <select id="fTipoConta">
+            <option value="corrente">Conta corrente</option>
+            <option value="poupanca">Conta poupança</option>
+          </select>
+        </div>
+        <div class="field"><label>Nome do titular</label><input type="text" id="fTitular" required></div>
+      </div>
+      <div class="field"><label>CPF/CNPJ do titular</label><input type="text" id="fTitularDoc" required></div>
+    </div>
+
+    <button class="btn btn-primary" type="submit" id="submitBtn">Enviar solicitação de cadastro</button>
+    <p class="msg" id="formMsg"></p>
+  </form>
+
+  <div class="success-box" id="successBox" hidden>
+    <h2>Solicitação enviada!</h2>
+    <p>Recebemos o cadastro da sua imobiliária. Nosso time vai analisar e entrar em contato pelo e-mail informado assim que a parceria for avaliada.</p>
+  </div>
+</div>
+
+<script>
+  var SUPABASE_URL = 'https://nudmdwxnbkowjnuhovcv.supabase.co';
+  var SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_gPvgjOlCtNX-QuAiDgK9rg_lSsTrVbx';
+  var supa = (typeof supabase !== 'undefined')
+    ? supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+    : null;
+
+  function setMsg(text, isErr){
+    var el = document.getElementById('formMsg');
+    el.textContent = text || '';
+    el.classList.toggle('err', !!isErr);
+  }
+
+  function slugifyFileName(name){
+    return String(name||'arquivo').normalize('NFD').replace(/[̀-ͯ]/g,'')
+      .replace(/[^a-zA-Z0-9.\-]+/g,'-').toLowerCase();
+  }
+
+  document.getElementById('cadastroForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    if (!supa){ setMsg('Não foi possível conectar ao servidor. Recarregue a página e tente novamente.', true); return; }
+
+    var razaoSocial = document.getElementById('fRazaoSocial').value.trim();
+    var cnpj = document.getElementById('fCnpj').value.trim();
+    var responsavel = document.getElementById('fResponsavel').value.trim();
+    var telefone = document.getElementById('fTelefone').value.trim();
+    var email = document.getElementById('fEmail').value.trim().toLowerCase();
+    var fileInput = document.getElementById('fContratoSocial');
+    var file = fileInput.files && fileInput.files[0];
+    var banco = document.getElementById('fBanco').value.trim();
+    var agencia = document.getElementById('fAgencia').value.trim();
+    var conta = document.getElementById('fConta').value.trim();
+    var tipoConta = document.getElementById('fTipoConta').value;
+    var titular = document.getElementById('fTitular').value.trim();
+    var titularDoc = document.getElementById('fTitularDoc').value.trim();
+
+    if (!razaoSocial || !cnpj || !responsavel || !telefone || !email || !file || !banco || !agencia || !conta || !titular || !titularDoc){
+      setMsg('Preencha todos os campos e anexe o contrato social antes de enviar.', true);
+      return;
+    }
+
+    var btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    setMsg('Enviando solicitação…');
+
+    var requestId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+    var path = 'pendentes/' + requestId + '/contrato-social-' + slugifyFileName(file.name);
+
+    supa.storage.from('imobiliarias-docs').upload(path, file, {upsert:false}).then(function(res){
+      if (res.error) throw res.error;
+      return supa.from('imobiliarias').insert({
+        razao_social: razaoSocial,
+        cnpj: cnpj,
+        responsavel_nome: responsavel,
+        telefone: telefone,
+        email: email,
+        contrato_social_path: path,
+        dados_bancarios: {banco:banco, agencia:agencia, conta:conta, tipo_conta:tipoConta, titular:titular, titular_documento:titularDoc},
+        status: 'pendente'
+      });
+    }).then(function(res){
+      if (res.error) throw res.error;
+      document.getElementById('cadastroForm').hidden = true;
+      document.getElementById('successBox').hidden = false;
+    }).catch(function(err){
+      console.error(err);
+      btn.disabled = false;
+      setMsg('Não foi possível enviar sua solicitação agora. Tente novamente em instantes.', true);
+    });
+  });
+</script>
+</body></html>

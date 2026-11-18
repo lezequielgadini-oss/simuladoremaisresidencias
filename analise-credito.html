@@ -1,0 +1,355 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<title>Análise de crédito &middot; Portal Emais Residências</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+  :root{
+    --bg:#faf9fc; --surface:#ffffff; --surface-alt:#f2eef8; --border:#e2dcec; --border-soft:#ece7f4;
+    --text:#2a2433; --text-muted:#6d6480; --text-faint:#9891a8;
+    --shadow:0 1px 2px rgba(42,36,51,.05), 0 8px 24px -12px rgba(42,36,51,.18);
+    --accent:#6e6096; --accent-dark:#4d4269; --accent-soft:#ece6f6;
+    --good:#1f8a5f; --good-soft:#dcf2e9; --danger:#c23434;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#150f1d; --surface:#1e1829; --surface-alt:#251e33; --border:#382c4a; --border-soft:#2b2338;
+      --text:#f1ecf9; --text-muted:#b3a7c9; --text-faint:#6f6486;
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.6);
+      --accent:#a97fb8; --accent-dark:#d4b6de; --accent-soft:#332943;
+      --good:#4ed8a0; --good-soft:#0f2c22; --danger:#f28b8b;
+    }
+  }
+  *{box-sizing:border-box;}
+  html{color-scheme:light dark;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif; font-size:14px; line-height:1.45;}
+  h1,h2,h3{font-family:'Archivo', ui-sans-serif, system-ui, sans-serif; text-wrap:balance; margin:0;}
+  button, select, input, textarea{font-family:inherit; font-size:inherit; color:inherit;}
+  a{color:inherit;}
+  .shell{max-width:760px; margin:0 auto; padding:20px 20px 64px;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0 18px;}
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand-mark{width:34px; height:34px; flex:none;}
+  .brand-text h1{font-size:18px; font-weight:800;}
+  .brand-text p{margin:1px 0 0; font-size:12.5px; color:var(--text-muted);}
+  .topnav{display:flex; align-items:center; gap:12px;}
+  .topnav a{font-size:12.5px; color:var(--text-muted); text-decoration:none; font-weight:600;}
+  .user-chip{display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border-soft); border-radius:99px; padding:6px 8px 6px 14px; box-shadow:var(--shadow); font-size:12.5px;}
+  .user-chip button{border:none; background:var(--surface-alt); color:var(--text-muted); border-radius:99px; padding:4px 10px; cursor:pointer; font-size:11.5px; font-weight:500;}
+  .intro{margin:0 0 20px; color:var(--text-muted); font-size:13px;}
+  .step-card{background:var(--surface); border:1px solid var(--border-soft); border-radius:14px; box-shadow:var(--shadow); padding:20px 22px; margin-bottom:16px;}
+  .step-card h2{font-size:14.5px; font-weight:700; margin-bottom:4px;}
+  .step-card .sub{font-size:12px; color:var(--text-muted); margin:0 0 14px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px 16px;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px 16px;}
+  @media (max-width:640px){ .grid2,.grid3{grid-template-columns:1fr;} }
+  .field{display:flex; flex-direction:column; gap:5px; margin-bottom:12px;}
+  .field label{font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em;}
+  .field input, .field select, .field textarea{border:1px solid var(--border); border-radius:8px; padding:9px 10px; background:var(--bg); color:var(--text); width:100%; font-family:inherit;}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--accent);}
+  .field input[type=file]{padding:7px;}
+  .field textarea{min-height:60px; resize:vertical;}
+  .toggle-row{display:flex; align-items:center; gap:10px; margin:0 0 14px;}
+  .toggle-row label{font-size:12.5px; font-weight:600;}
+  .toggle-btns{display:flex; gap:6px;}
+  .toggle-btns button{border:1px solid var(--border); background:var(--surface-alt); color:var(--text-muted); border-radius:7px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer;}
+  .toggle-btns button.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .person-block{border:1px solid var(--border-soft); border-radius:12px; padding:16px; margin-top:4px; background:var(--surface-alt);}
+  .person-block h3{font-size:13px; font-weight:700; margin-bottom:10px;}
+  .doc-sub{font-size:11.5px; color:var(--text-faint); margin:-6px 0 10px;}
+  .btn{border:none; border-radius:9px; padding:12px 20px; font-size:13.5px; font-weight:700; cursor:pointer; font-family:'Archivo',sans-serif;}
+  .btn-primary{background:var(--accent); color:#fff; width:100%;}
+  .btn-primary:hover{background:var(--accent-dark);}
+  .btn-primary:disabled{opacity:.5; cursor:default;}
+  .msg{font-size:12.5px; margin:10px 0 0; color:var(--text-muted);}
+  .msg.err{color:var(--danger); font-weight:600;}
+  .success-box{background:var(--good-soft); border:1px solid var(--good); border-radius:14px; padding:26px 24px; text-align:center;}
+  .success-box h2{color:var(--good); font-size:17px; margin-bottom:8px;}
+  .success-box p{margin:0 0 14px; color:var(--text);}
+  .gate{max-width:420px; margin:14vh auto; text-align:center; color:var(--text-muted); font-size:13px;}
+</style>
+
+<div class="shell" id="appShell" hidden>
+  <div class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <rect x="2" y="2" width="16" height="16" rx="3" fill="#6e6096"/>
+        <rect x="22" y="2" width="16" height="16" rx="3" fill="#c99f2e"/>
+        <rect x="2" y="22" width="16" height="16" rx="3" fill="#9a7fb0"/>
+        <rect x="22" y="22" width="16" height="16" rx="3" fill="#4d4269"/>
+      </svg>
+      <div class="brand-text">
+        <h1>Análise de crédito</h1>
+        <p>Envie a documentação do cliente para análise</p>
+      </div>
+    </div>
+    <div class="topnav">
+      <a href="index.html">&larr; Portal</a>
+      <div class="user-chip">
+        <b id="userLabel">&mdash;</b>
+        <button id="logoutBtn" type="button">sair</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="intro">Esse formulário é só uma porta de envio de documentação: ao enviar, mandamos um e-mail com os dados e os anexos para a equipe comercial e para o seu e-mail de cadastro. Não há aprovação ou reprovação dentro do sistema.</p>
+
+  <form id="analiseForm">
+    <div class="step-card">
+      <h2>Empreendimento</h2>
+      <div class="field"><label>Qual empreendimento</label><input type="text" id="fEmpreendimento" required></div>
+    </div>
+
+    <div class="step-card">
+      <h2>Dados do cliente</h2>
+      <div id="clienteBlock"></div>
+    </div>
+
+    <div class="step-card">
+      <div class="toggle-row">
+        <label>Possui cônjuge?</label>
+        <div class="toggle-btns">
+          <button type="button" class="active" id="conjugeNaoBtn" data-v="nao">Não</button>
+          <button type="button" id="conjugeSimBtn" data-v="sim">Sim</button>
+        </div>
+      </div>
+      <div id="conjugeBlockWrap" hidden>
+        <h2 style="margin-bottom:10px;">Dados do cônjuge</h2>
+        <div id="conjugeBlock"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" type="submit" id="submitBtn">Enviar solicitação de análise de crédito</button>
+    <p class="msg" id="formMsg"></p>
+  </form>
+
+  <div class="success-box" id="successBox" hidden>
+    <h2>Solicitação enviada!</h2>
+    <p>Mandamos os dados e os documentos anexados para a equipe comercial e para o seu e-mail de cadastro.</p>
+    <button class="btn btn-primary" type="button" id="novaAnaliseBtn" style="width:auto;">Enviar outra análise</button>
+  </div>
+</div>
+
+<div class="gate" id="gateMsg" hidden></div>
+
+<script>
+  var SUPABASE_URL = 'https://nudmdwxnbkowjnuhovcv.supabase.co';
+  var SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_gPvgjOlCtNX-QuAiDgK9rg_lSsTrVbx';
+  var supa = (typeof supabase !== 'undefined') ? supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
+  var CURRENT_PROFILE = null;
+  var CURRENT_USER_ID = null;
+  var conjugeAtivo = false;
+
+  var esc = function(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); };
+
+  function showGate(msg){
+    document.getElementById('appShell').hidden = true;
+    var g = document.getElementById('gateMsg');
+    g.hidden = false;
+    g.innerHTML = msg;
+  }
+
+  // Bloco de campos de uma pessoa (cliente OU cônjuge) -- mesmo conjunto de
+  // campos e anexos pros dois, só muda o prefixo dos ids (p = 'cliente' ou
+  // 'conjuge'), porque o requisito é duplicar tudo quando tem cônjuge.
+  function personBlockHtml(p, titulo){
+    return '<div class="person-block" data-person="'+p+'">'
+      + (titulo ? '<h3>'+esc(titulo)+'</h3>' : '')
+      + '<div class="grid2">'
+      + '<div class="field"><label>Nome</label><input type="text" id="'+p+'_nome" required></div>'
+      + '<div class="field"><label>Telefone</label><input type="tel" id="'+p+'_telefone" required></div>'
+      + '</div>'
+      + '<div class="grid2">'
+      + '<div class="field"><label>E-mail</label><input type="email" id="'+p+'_email" required></div>'
+      + '<div class="field"><label>Renda</label><input type="number" id="'+p+'_renda" min="0" step="50" required></div>'
+      + '</div>'
+      + '<div class="field"><label>Profissão</label><input type="text" id="'+p+'_profissao" required></div>'
+      + (p==='cliente' ? '<div class="field"><label>Observações necessárias</label><textarea id="'+p+'_observacoes"></textarea></div>' : '')
+      + '<div class="toggle-row">'
+      + '<label>Teve férias, desconto ou comissão variável no período?</label>'
+      + '<div class="toggle-btns">'
+      + '<button type="button" class="var-renda-btn active" data-p="'+p+'" data-v="nao">Não</button>'
+      + '<button type="button" class="var-renda-btn" data-p="'+p+'" data-v="sim">Sim</button>'
+      + '</div></div>'
+      + '<div class="field"><label>Comprovante de renda &mdash; holerite mais recente</label><input type="file" id="'+p+'_holerite1" accept=".pdf,.jpg,.jpeg,.png" required></div>'
+      + '<div id="'+p+'_holeritesExtraWrap" hidden>'
+      + '<p class="doc-sub">Como teve período variável, anexe também os 2 holerites anteriores.</p>'
+      + '<div class="grid2">'
+      + '<div class="field"><label>Penúltimo holerite</label><input type="file" id="'+p+'_holerite2" accept=".pdf,.jpg,.jpeg,.png"></div>'
+      + '<div class="field"><label>Antepenúltimo holerite</label><input type="file" id="'+p+'_holerite3" accept=".pdf,.jpg,.jpeg,.png"></div>'
+      + '</div></div>'
+      + '<div class="field"><label>Documentação pessoal (RG/CPF)</label><input type="file" id="'+p+'_docPessoal" accept=".pdf,.jpg,.jpeg,.png" multiple required></div>'
+      + '<div class="field"><label>Comprovante de residência (água, luz ou internet)</label><input type="file" id="'+p+'_comprovanteResidencia" accept=".pdf,.jpg,.jpeg,.png" required></div>'
+      + '<div class="field"><label>Certidão de estado civil</label><input type="file" id="'+p+'_certidaoEstadoCivil" accept=".pdf,.jpg,.jpeg,.png" required></div>'
+      + '<div class="field"><label>Carteira de trabalho</label><input type="file" id="'+p+'_carteiraTrabalho" accept=".pdf,.jpg,.jpeg,.png" required></div>'
+      + '</div>';
+  }
+
+  function wireVarRendaToggle(container){
+    container.querySelectorAll('.var-renda-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var p = btn.getAttribute('data-p');
+        var v = btn.getAttribute('data-v');
+        container.querySelectorAll('.var-renda-btn[data-p="'+p+'"]').forEach(function(b){ b.classList.toggle('active', b===btn); });
+        var extraWrap = document.getElementById(p+'_holeritesExtraWrap');
+        extraWrap.hidden = (v !== 'sim');
+        extraWrap.querySelectorAll('input[type=file]').forEach(function(inp){ inp.required = (v === 'sim'); });
+      });
+    });
+  }
+
+  document.getElementById('clienteBlock').innerHTML = personBlockHtml('cliente', null);
+  wireVarRendaToggle(document.getElementById('clienteBlock'));
+
+  document.getElementById('conjugeSimBtn').addEventListener('click', function(){
+    conjugeAtivo = true;
+    document.getElementById('conjugeSimBtn').classList.add('active');
+    document.getElementById('conjugeNaoBtn').classList.remove('active');
+    document.getElementById('conjugeBlockWrap').hidden = false;
+    var wrap = document.getElementById('conjugeBlock');
+    if (!wrap.dataset.built){
+      wrap.innerHTML = personBlockHtml('conjuge', null);
+      wireVarRendaToggle(wrap);
+      wrap.dataset.built = '1';
+    }
+    wrap.querySelectorAll('input[required], input[data-wasrequired]').forEach(function(inp){ inp.required = true; });
+  });
+  document.getElementById('conjugeNaoBtn').addEventListener('click', function(){
+    conjugeAtivo = false;
+    document.getElementById('conjugeNaoBtn').classList.add('active');
+    document.getElementById('conjugeSimBtn').classList.remove('active');
+    document.getElementById('conjugeBlockWrap').hidden = true;
+    document.getElementById('conjugeBlock').querySelectorAll('input').forEach(function(inp){ inp.required = false; });
+  });
+
+  function slugifyFileName(name){
+    return String(name||'arquivo').normalize('NFD').replace(/[̀-ͯ]/g,'')
+      .replace(/[^a-zA-Z0-9.\-]+/g,'-').toLowerCase();
+  }
+
+  function collectPerson(p){
+    var varRenda = document.querySelector('.var-renda-btn[data-p="'+p+'"].active').getAttribute('data-v') === 'sim';
+    var data = {
+      nome: document.getElementById(p+'_nome').value.trim(),
+      telefone: document.getElementById(p+'_telefone').value.trim(),
+      email: document.getElementById(p+'_email').value.trim(),
+      renda: parseFloat(document.getElementById(p+'_renda').value) || 0,
+      profissao: document.getElementById(p+'_profissao').value.trim(),
+      renda_variavel: varRenda
+    };
+    var obsEl = document.getElementById(p+'_observacoes');
+    if (obsEl) data.observacoes = obsEl.value.trim();
+    var files = {
+      holerite1: document.getElementById(p+'_holerite1').files[0] || null,
+      holerite2: document.getElementById(p+'_holerite2').files[0] || null,
+      holerite3: document.getElementById(p+'_holerite3').files[0] || null,
+      docPessoal: Array.prototype.slice.call(document.getElementById(p+'_docPessoal').files || []),
+      comprovanteResidencia: document.getElementById(p+'_comprovanteResidencia').files[0] || null,
+      certidaoEstadoCivil: document.getElementById(p+'_certidaoEstadoCivil').files[0] || null,
+      carteiraTrabalho: document.getElementById(p+'_carteiraTrabalho').files[0] || null
+    };
+    return {data: data, files: files};
+  }
+
+  function uploadPersonDocs(basePath, p, files){
+    var uploads = [];
+    var docMap = {};
+    function addUpload(label, file, idx){
+      if (!file) return;
+      var path = basePath + '/' + p + '/' + label + (idx!=null?('-'+idx):'') + '-' + slugifyFileName(file.name);
+      uploads.push(supa.storage.from('analises-credito-docs').upload(path, file, {upsert:false}).then(function(res){
+        if (res.error) throw res.error;
+        if (idx != null){
+          docMap[label] = docMap[label] || [];
+          docMap[label].push(path);
+        } else {
+          docMap[label] = path;
+        }
+      }));
+    }
+    addUpload('holerite-1', files.holerite1);
+    addUpload('holerite-2', files.holerite2);
+    addUpload('holerite-3', files.holerite3);
+    files.docPessoal.forEach(function(f, i){ addUpload('documentacao-pessoal', f, i+1); });
+    addUpload('comprovante-residencia', files.comprovanteResidencia);
+    addUpload('certidao-estado-civil', files.certidaoEstadoCivil);
+    addUpload('carteira-trabalho', files.carteiraTrabalho);
+    return Promise.all(uploads).then(function(){ return docMap; });
+  }
+
+  document.getElementById('analiseForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    if (!supa || !CURRENT_PROFILE){ return; }
+    var msgEl = document.getElementById('formMsg');
+    msgEl.classList.remove('err');
+    var empreendimento = document.getElementById('fEmpreendimento').value.trim();
+    if (!empreendimento){ msgEl.textContent='Informe o empreendimento.'; msgEl.classList.add('err'); return; }
+
+    var cliente = collectPerson('cliente');
+    var conjuge = conjugeAtivo ? collectPerson('conjuge') : null;
+
+    var btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    msgEl.textContent = 'Enviando documentação…';
+
+    var analiseId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+    var basePath = CURRENT_PROFILE.imobiliaria_id + '/' + analiseId;
+
+    var uploadsAll = [uploadPersonDocs(basePath, 'cliente', cliente.files)];
+    if (conjuge) uploadsAll.push(uploadPersonDocs(basePath, 'conjuge', conjuge.files));
+    else uploadsAll.push(Promise.resolve(null));
+
+    Promise.all(uploadsAll).then(function(results){
+      var documentos = {cliente: results[0]};
+      if (results[1]) documentos.conjuge = results[1];
+      return supa.from('analises_credito').insert({
+        id: analiseId,
+        imobiliaria_id: CURRENT_PROFILE.imobiliaria_id,
+        criado_por: CURRENT_USER_ID,
+        empreendimento: empreendimento,
+        cliente: cliente.data,
+        conjuge: conjuge ? conjuge.data : null,
+        documentos: documentos
+      });
+    }).then(function(res){
+      if (res.error) throw res.error;
+      document.getElementById('analiseForm').hidden = true;
+      document.getElementById('successBox').hidden = false;
+    }).catch(function(err){
+      console.error(err);
+      btn.disabled = false;
+      msgEl.textContent = 'Não foi possível enviar agora. Tente novamente em instantes.';
+      msgEl.classList.add('err');
+    });
+  });
+
+  document.getElementById('novaAnaliseBtn').addEventListener('click', function(){
+    window.location.reload();
+  });
+
+  function boot(){
+    if (!supa){ showGate('Não foi possível carregar a biblioteca de autenticação. Recarregue a página.'); return; }
+    supa.auth.getSession().then(function(res){
+      var session = res.data && res.data.session;
+      if (!session){
+        showGate('Você precisa entrar no <a href="index.html" style="color:var(--accent-dark); font-weight:700;">Portal Emais Residências</a> primeiro.');
+        return;
+      }
+      CURRENT_USER_ID = session.user.id;
+      supa.from('profiles').select('id,email,nome,papel,imobiliaria_id').eq('id', session.user.id).single().then(function(pres){
+        if (pres.error || !pres.data){ showGate('Não foi possível carregar seu perfil.'); return; }
+        CURRENT_PROFILE = pres.data;
+        if (CURRENT_PROFILE.papel !== 'imobiliaria' || !CURRENT_PROFILE.imobiliaria_id){
+          showGate('Esse módulo é restrito a imobiliárias parceiras aprovadas. <a href="index.html" style="color:var(--accent-dark); font-weight:700;">Voltar ao Portal</a>.');
+          return;
+        }
+        document.getElementById('appShell').hidden = false;
+        document.getElementById('userLabel').textContent = CURRENT_PROFILE.nome || CURRENT_PROFILE.email;
+      });
+    });
+  }
+  document.getElementById('logoutBtn').addEventListener('click', function(){
+    if (supa) supa.auth.signOut().then(function(){ window.location.href = 'index.html'; });
+  });
+  boot();
+</script>
+</body></html>

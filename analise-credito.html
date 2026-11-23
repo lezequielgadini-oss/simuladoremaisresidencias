@@ -65,6 +65,18 @@
   .success-box{background:var(--good-soft); border:1px solid var(--good); border-radius:14px; padding:26px 24px; text-align:center;}
   .success-box h2{color:var(--good); font-size:17px; margin-bottom:8px;}
   .success-box p{margin:0 0 14px; color:var(--text);}
+  .lgpd-card p{font-size:12.5px; color:var(--text); margin:0 0 10px;}
+  .lgpd-check{display:flex; gap:10px; align-items:flex-start; background:var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:12px 14px; cursor:pointer; font-size:12.5px; font-weight:600;}
+  .lgpd-check input{margin-top:3px; width:16px; height:16px; flex:none; accent-color:var(--accent);}
+  .adm-card{background:var(--surface); border:1px solid var(--border-soft); border-radius:14px; box-shadow:var(--shadow); padding:16px 20px; margin-bottom:12px;}
+  .adm-card h3{font-size:14.5px; font-weight:700; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+  .adm-card .when{font-size:11.5px; color:var(--text-faint); font-weight:400;}
+  .adm-card .line{font-size:12.5px; margin:3px 0; color:var(--text-muted);}
+  .adm-card .line b{color:var(--text);}
+  .adm-docs{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:8px;}
+  .adm-doc{font-size:12px; font-weight:700; color:var(--accent-dark); text-decoration:underline; cursor:pointer;}
+  .adm-doc-title{font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); margin:10px 0 0; font-weight:700;}
+  .adm-empty{color:var(--text-muted); font-size:13px; padding:26px 0; text-align:center; border:1px dashed var(--border); border-radius:14px;}
   .gate{max-width:420px; margin:14vh auto; text-align:center; color:var(--text-muted); font-size:13px;}
 </style>
 
@@ -118,9 +130,18 @@
       </div>
     </div>
 
+    <div class="step-card lgpd-card">
+      <h2>Autorização e responsabilidade (LGPD)</h2>
+      <p>Os dados pessoais e os documentos do cliente (e do cônjuge, quando houver) enviados neste formulário serão tratados pela Emais exclusivamente para a finalidade de análise de crédito, em conformidade com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018).</p>
+      <p>Ao enviar, a imobiliária declara que obteve do titular dos dados (cliente e cônjuge) o consentimento ou possui outra base legal válida para compartilhá-los com a Emais para essa finalidade, e que se responsabiliza pela veracidade das informações e pela legitimidade desse envio.</p>
+      <label class="lgpd-check"><input type="checkbox" id="lgpdAceite" required><span>Declaro, em nome da imobiliária, que sou responsável pelo envio dos dados e documentos do cliente para análise de crédito e que tenho autorização do titular para compartilhá-los, nos termos da LGPD.</span></label>
+    </div>
+
     <button class="btn btn-primary" type="submit" id="submitBtn">Enviar solicitação de análise de crédito</button>
     <p class="msg" id="formMsg"></p>
   </form>
+
+  <div id="adminView" hidden></div>
 
   <div class="success-box" id="successBox" hidden>
     <h2>Solicitação enviada!</h2>
@@ -281,6 +302,8 @@
     if (!supa || !CURRENT_PROFILE){ return; }
     var msgEl = document.getElementById('formMsg');
     msgEl.classList.remove('err');
+    if (!CURRENT_PROFILE.imobiliaria_id){ return; }
+    if (!document.getElementById('lgpdAceite').checked){ msgEl.textContent='Para enviar, marque a declaração de responsabilidade e autorização (LGPD).'; msgEl.classList.add('err'); return; }
     var empreendimento = document.getElementById('fEmpreendimento').value.trim();
     if (!empreendimento){ msgEl.textContent='Informe o empreendimento.'; msgEl.classList.add('err'); return; }
 
@@ -308,7 +331,14 @@
         empreendimento: empreendimento,
         cliente: cliente.data,
         conjuge: conjuge ? conjuge.data : null,
-        documentos: documentos
+        documentos: documentos,
+        lgpd_aceite: {
+          aceito: true,
+          versao_texto: 'v1-2026-11',
+          aceito_em: new Date().toISOString(),
+          aceito_por: CURRENT_USER_ID,
+          imobiliaria_id: CURRENT_PROFILE.imobiliaria_id
+        }
       });
     }).then(function(res){
       if (res.error) throw res.error;
@@ -326,6 +356,91 @@
     window.location.reload();
   });
 
+
+  // ---- Visão do administrador: lista das solicitações recebidas ----
+  function fmtDateTime(iso){
+    if (!iso) return '';
+    var d = new Date(iso);
+    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+  }
+  var DOC_LABELS = {holerite1:'Holerite mais recente', holerite2:'Penúltimo holerite', holerite3:'Antepenúltimo holerite', docPessoal:'RG/CPF', comprovanteResidencia:'Comprovante de residência', certidaoEstadoCivil:'Certidão de estado civil', carteiraTrabalho:'Carteira de trabalho'};
+
+  function docsHtml(docs, titulo){
+    if (!docs) return '';
+    var links = [];
+    Object.keys(docs).forEach(function(k){
+      var v = docs[k];
+      var list = Array.isArray(v) ? v : [v];
+      list.forEach(function(path, i){
+        if (!path) return;
+        var label = (DOC_LABELS[k] || k) + (list.length > 1 ? ' ' + (i+1) : '');
+        links.push('<span class="adm-doc" data-path="'+esc(path)+'" data-label="'+esc(label)+'">'+esc(label)+'</span>');
+      });
+    });
+    if (!links.length) return '';
+    return '<div class="adm-doc-title">'+esc(titulo)+'</div><div class="adm-docs">'+links.join('')+'</div>';
+  }
+
+  function personLine(pessoa){
+    if (!pessoa) return '';
+    return '<b>'+esc(pessoa.nome)+'</b> &middot; '+esc(pessoa.telefone)+' &middot; '+esc(pessoa.email)+' &middot; renda R$ '+esc(pessoa.renda)+' &middot; '+esc(pessoa.profissao);
+  }
+
+  function renderAnalise(row, imobMap){
+    var imob = imobMap[row.imobiliaria_id] || {};
+    var nomeImob = imob.razao_social || imob.nome_fantasia || imob.nome || row.imobiliaria_id;
+    var docs = row.documentos || {};
+    var lg = row.lgpd_aceite;
+    var lgLine = (lg && lg.aceito)
+      ? 'Declaração LGPD aceita em '+esc(fmtDateTime(lg.aceito_em))
+      : 'Sem registro de aceite LGPD (envio anterior à exigência)';
+    return '<div class="adm-card">'
+      + '<h3><span>'+esc(row.empreendimento)+' &middot; '+esc(nomeImob)+'</span><span class="when">'+esc(fmtDateTime(row.created_at))+'</span></h3>'
+      + '<div class="line"><b>Cliente:</b> '+personLine(row.cliente)+'</div>'
+      + (row.cliente && row.cliente.observacoes ? '<div class="line"><b>Observações:</b> '+esc(row.cliente.observacoes)+'</div>' : '')
+      + (row.conjuge ? '<div class="line"><b>Cônjuge:</b> '+personLine(row.conjuge)+'</div>' : '')
+      + '<div class="line">'+lgLine+'</div>'
+      + docsHtml(docs.cliente, 'Documentos do cliente')
+      + docsHtml(docs.conjuge, 'Documentos do cônjuge')
+      + '</div>';
+  }
+
+  function showAdminView(){
+    document.getElementById('analiseForm').hidden = true;
+    document.querySelector('.intro').hidden = true;
+    document.querySelector('.brand-text p').textContent = 'Solicitações recebidas das imobiliárias parceiras';
+    var box = document.getElementById('adminView');
+    box.hidden = false;
+    box.innerHTML = '<p class="msg">Carregando solicitações…</p>';
+    Promise.all([
+      supa.from('analises_credito').select('*').order('created_at', {ascending:false}),
+      supa.from('imobiliarias').select('*')
+    ]).then(function(rs){
+      var r = rs[0];
+      if (r.error){
+        console.error(r.error);
+        box.innerHTML = '<p class="msg err">Não foi possível carregar as solicitações. Verifique se o administrador tem permissão de leitura na tabela analises_credito.</p>';
+        return;
+      }
+      var imobMap = {};
+      ((rs[1] && rs[1].data) || []).forEach(function(i){ imobMap[i.id] = i; });
+      var rows = r.data || [];
+      if (!rows.length){ box.innerHTML = '<div class="adm-empty">Nenhuma solicitação de análise de crédito recebida ainda.</div>'; return; }
+      box.innerHTML = '<p class="msg" style="margin:0 0 12px;">'+rows.length+' solicitação(ões)</p>' + rows.map(function(row){ return renderAnalise(row, imobMap); }).join('');
+      box.querySelectorAll('.adm-doc').forEach(function(a){
+        a.addEventListener('click', function(){
+          var path = a.getAttribute('data-path'); var label = a.getAttribute('data-label');
+          a.textContent = 'Abrindo…';
+          supa.storage.from('analises-credito-docs').createSignedUrl(path, 600).then(function(res){
+            a.textContent = label;
+            if (res.error || !res.data){ alert('Não foi possível abrir o documento agora.'); return; }
+            window.open(res.data.signedUrl, '_blank');
+          });
+        });
+      });
+    });
+  }
+
   function boot(){
     if (!supa){ showGate('Não foi possível carregar a biblioteca de autenticação. Recarregue a página.'); return; }
     supa.auth.getSession().then(function(res){
@@ -338,12 +453,15 @@
       supa.from('profiles').select('id,email,nome,papel,imobiliaria_id').eq('id', session.user.id).single().then(function(pres){
         if (pres.error || !pres.data){ showGate('Não foi possível carregar seu perfil.'); return; }
         CURRENT_PROFILE = pres.data;
-        if (CURRENT_PROFILE.papel !== 'imobiliaria' || !CURRENT_PROFILE.imobiliaria_id){
+        var ehAdmin = CURRENT_PROFILE.papel === 'administrador';
+        var ehImobiliaria = CURRENT_PROFILE.papel === 'imobiliaria' && !!CURRENT_PROFILE.imobiliaria_id;
+        if (!ehAdmin && !ehImobiliaria){
           showGate('Esse módulo é restrito a imobiliárias parceiras aprovadas. <a href="index.html" style="color:var(--accent-dark); font-weight:700;">Voltar ao Portal</a>.');
           return;
         }
         document.getElementById('appShell').hidden = false;
         document.getElementById('userLabel').textContent = CURRENT_PROFILE.nome || CURRENT_PROFILE.email;
+        if (ehAdmin){ showAdminView(); }
       });
     });
   }

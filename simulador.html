@@ -963,7 +963,7 @@
     var f = document.getElementById('loginForm');
     if (f) f.reset();
   }
-  var PAPEL_LABELS = {administrador:'Administrador', coordenador_vendas:'Coordenador de vendas', corretor_interno:'Corretor interno'};
+  var PAPEL_LABELS = {administrador:'Administrador', coordenador_vendas:'Coordenador de vendas', corretor_interno:'Corretor interno', corretor_imobiliaria:'Corretor imobiliária', imobiliaria:'Imobiliária parceira'};
   function applyProfileToUI(profile){
     CURRENT_PROFILE = profile;
     CURRENT_USER = profile ? (profile.nome || profile.email) : null;
@@ -3570,10 +3570,16 @@
    * roda no servidor com a chave service_role (que nunca chega aqui) e
    * confirma de novo, do lado do servidor, que quem está chamando é
    * mesmo administrador. */
+  var IMOBILIARIAS_APROVADAS = [];
   function loadUsuarios(){
     if (!supa) return;
-    supa.from('profiles').select('id,email,nome,papel,principal').order('nome', {ascending:true}).then(function(res){
+    Promise.all([
+      supa.from('profiles').select('id,email,nome,papel,principal,imobiliaria_id').order('nome', {ascending:true}),
+      supa.from('imobiliarias').select('id,razao_social,status').eq('status','aprovado').order('razao_social', {ascending:true})
+    ]).then(function(rs){
+      var res = rs[0];
       if (res.error){ console.error(res.error); return; }
+      IMOBILIARIAS_APROVADAS = (rs[1] && rs[1].data) || [];
       renderUsuarios(res.data || []);
     });
   }
@@ -3593,10 +3599,16 @@
       if (u.principal || u.id === meuId){
         papelCtrl = '';
       } else {
-        var opts = ['corretor_interno','coordenador_vendas','administrador'].map(function(p){
-          return '<option value="'+p+'"'+(p===u.papel?' selected':'')+'>'+esc(PAPEL_LABELS[p])+'</option>';
+        var papeisOpc = ['corretor_interno','coordenador_vendas','corretor_imobiliaria','administrador'];
+        if (papeisOpc.indexOf(u.papel) === -1) papeisOpc.unshift(u.papel); // ex.: imobiliária parceira, pra não trocar sem querer
+        var opts = papeisOpc.map(function(p){
+          return '<option value="'+esc(p)+'"'+(p===u.papel?' selected':'')+'>'+esc(PAPEL_LABELS[p]||p)+'</option>';
+        }).join('');
+        var imobOpts = '<option value="">Selecione a imobiliária…</option>' + IMOBILIARIAS_APROVADAS.map(function(i){
+          return '<option value="'+esc(i.id)+'"'+(i.id===u.imobiliaria_id?' selected':'')+'>'+esc(i.razao_social)+'</option>';
         }).join('');
         papelCtrl = '<select class="usr-papel-sel" data-id="'+esc(u.id)+'" style="margin-right:6px;">'+opts+'</select>'
+          + '<select class="usr-imob-sel" data-id="'+esc(u.id)+'" style="margin-right:6px; max-width:200px;"'+(u.papel==='corretor_imobiliaria'?'':' hidden')+'>'+imobOpts+'</select>'
           + '<button class="btn btn-ghost usr-papel-save" type="button" data-id="'+esc(u.id)+'">Salvar</button>';
       }
       // Trocar senha fica disponível pra qualquer usuário (inclusive o
@@ -3609,16 +3621,28 @@
       var acoesCell = papelCtrl + senhaCtrl;
       return '<tr><td>'+nomeCell+'</td><td>'+esc(u.email||'—')+'</td><td>'+esc(PAPEL_LABELS[u.papel]||u.papel)+'</td><td>'+acoesCell+'</td></tr>';
     }).join('');
+    tbody.querySelectorAll('select.usr-papel-sel').forEach(function(sel){
+      sel.addEventListener('change', function(){
+        var imobSel = tbody.querySelector('select.usr-imob-sel[data-id="'+sel.getAttribute('data-id')+'"]');
+        if (imobSel) imobSel.hidden = (sel.value !== 'corretor_imobiliaria');
+      });
+    });
     tbody.querySelectorAll('.usr-papel-save').forEach(function(btn){
       btn.addEventListener('click', function(){
         var id = btn.getAttribute('data-id');
         var sel = tbody.querySelector('select.usr-papel-sel[data-id="'+id+'"]');
         if (!sel || !supa) return;
         var novoPapel = sel.value;
+        var imobSel = tbody.querySelector('select.usr-imob-sel[data-id="'+id+'"]');
+        var upd = {papel: novoPapel};
+        if (novoPapel === 'corretor_imobiliaria'){
+          if (!imobSel || !imobSel.value){ showToast('Escolha a imobiliária desse corretor antes de salvar.'); return; }
+          upd.imobiliaria_id = imobSel.value;
+        }
         var prevText = btn.textContent;
         btn.disabled = true;
         btn.textContent = 'Salvando…';
-        supa.from('profiles').update({papel: novoPapel}).eq('id', id).then(function(res){
+        supa.from('profiles').update(upd).eq('id', id).then(function(res){
           btn.disabled = false;
           btn.textContent = prevText;
           if (res.error){

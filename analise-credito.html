@@ -454,9 +454,9 @@
         if (pres.error || !pres.data){ showGate('Não foi possível carregar seu perfil.'); return; }
         CURRENT_PROFILE = pres.data;
         var ehAdmin = CURRENT_PROFILE.papel === 'administrador';
-        var ehImobiliaria = CURRENT_PROFILE.papel === 'imobiliaria' && !!CURRENT_PROFILE.imobiliaria_id;
+        var ehImobiliaria = (CURRENT_PROFILE.papel === 'imobiliaria' || CURRENT_PROFILE.papel === 'corretor_imobiliaria') && !!CURRENT_PROFILE.imobiliaria_id;
         if (!ehAdmin && !ehImobiliaria){
-          showGate('Esse módulo é restrito a imobiliárias parceiras aprovadas. <a href="index.html" style="color:var(--accent-dark); font-weight:700;">Voltar ao Portal</a>.');
+          showGate('Esse módulo é restrito a imobiliárias parceiras aprovadas e seus corretores (o usuário precisa estar vinculado a uma imobiliária). <a href="index.html" style="color:var(--accent-dark); font-weight:700;">Voltar ao Portal</a>.');
           return;
         }
         document.getElementById('appShell').hidden = false;

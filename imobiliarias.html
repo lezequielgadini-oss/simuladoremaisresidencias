@@ -56,6 +56,12 @@
   .btn-danger{background:var(--danger); color:#fff;}
   .btn-ghost{background:var(--surface-alt); color:var(--text);}
   .btn:disabled{opacity:.5; cursor:default;}
+  .emp-box{border:1px solid var(--border-soft); border-radius:10px; padding:12px 14px; margin-top:12px; background:var(--surface-alt);}
+  .emp-title{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); margin-bottom:8px;}
+  .emp-opts{display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:8px;}
+  .emp-opts label{display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; cursor:pointer;}
+  .emp-opts input{accent-color:var(--accent); width:15px; height:15px;}
+  .emp-outros{width:100%; border:1px solid var(--border); border-radius:8px; padding:7px 10px; background:var(--bg); color:var(--text); font-size:12.5px;}
   .pill{display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:99px; font-size:11px; font-weight:600;}
   .pill.pendente{background:var(--st-apr-soft); color:var(--st-apr);}
   .pill.aprovado{background:var(--good-soft); color:var(--good);}
@@ -121,6 +127,35 @@
     return esc(db.banco||'—') + ' &middot; ag. ' + esc(db.agencia||'—') + ' &middot; cc ' + esc(db.conta||'—') + ' (' + esc(db.tipo_conta||'—') + ')<br>titular: ' + esc(db.titular||'—') + ' &middot; ' + esc(db.titular_documento||'—');
   }
 
+  var EMP_CATALOGO = []; // nomes dos empreendimentos do catálogo (public.empreendimentos)
+
+  function empLabel(e){ return ((e.linha ? e.linha + ' ' : '') + (e.nome || '')).trim(); }
+
+  // Bloco de seleção dos empreendimentos que a imobiliária pode usar na Análise de crédito.
+  function empBoxHtml(row, comBotaoSalvar){
+    var sel = Array.isArray(row.empreendimentos_liberados) ? row.empreendimentos_liberados : [];
+    var catalogo = EMP_CATALOGO.slice();
+    var outros = sel.filter(function(n){ return catalogo.indexOf(n) === -1; });
+    return '<div class="emp-box" data-emp-box="'+esc(row.id)+'">'
+      + '<div class="emp-title">Empreendimentos liberados para análise de crédito</div>'
+      + '<div class="emp-opts">'
+      + (catalogo.length ? catalogo.map(function(n){
+          return '<label><input type="checkbox" data-emp-opt value="'+esc(n)+'"'+(sel.indexOf(n)!==-1?' checked':'')+'> '+esc(n)+'</label>';
+        }).join('') : '<span style="font-size:12px; color:var(--text-muted);">Nenhum empreendimento no catálogo. Use o campo abaixo.</span>')
+      + '</div>'
+      + '<input type="text" class="emp-outros" data-emp-outros placeholder="Outros empreendimentos (separe por vírgula)" value="'+esc(outros.join(', '))+'">'
+      + (comBotaoSalvar ? '<div class="approve-row"><button class="btn btn-ghost" type="button" data-emp-save="'+esc(row.id)+'">Salvar empreendimentos</button><span class="msg-inline" data-emp-msg="'+esc(row.id)+'"></span></div>' : '')
+      + '</div>';
+  }
+
+  function readEmpBox(card){
+    var lista = [];
+    card.querySelectorAll('[data-emp-opt]:checked').forEach(function(c){ lista.push(c.value); });
+    var outros = (card.querySelector('[data-emp-outros]') || {value:''}).value.split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+    outros.forEach(function(n){ if (lista.indexOf(n) === -1) lista.push(n); });
+    return lista;
+  }
+
   function renderReqCard(row, isPendente){
     var statusLabel = {pendente:'Pendente', aprovado:'Aprovado', recusado:'Recusado'}[row.status] || row.status;
     var html = '<div class="req-card" data-id="'+esc(row.id)+'">'
@@ -136,6 +171,7 @@
       + '<span class="doc-link" data-path="'+esc(row.contrato_social_path||'')+'">Ver contrato social anexado</span>';
 
     if (isPendente){
+      html += empBoxHtml(row, false);
       html += '<textarea class="obs-field" placeholder="Observação da aprovação/recusa (vai junto no e-mail para admcomercial@emais.com)" data-obs="'+esc(row.id)+'"></textarea>'
         + '<div class="approve-row">'
         + '<input type="password" placeholder="Senha inicial de acesso (mín. 8 caracteres)" data-senha="'+esc(row.id)+'" style="min-width:220px;">'
@@ -143,6 +179,9 @@
         + '<button class="btn btn-danger" type="button" data-recusar="'+esc(row.id)+'">Recusar</button>'
         + '</div>'
         + '<p class="msg-inline" data-msg="'+esc(row.id)+'"></p>';
+    } else if (row.status === 'aprovado') {
+      html += empBoxHtml(row, true);
+      if (row.observacao_aprovacao) html += '<p style="font-size:12px; color:var(--text-muted); margin-top:10px;"><b>Observação:</b> '+esc(row.observacao_aprovacao)+'</p>';
     } else if (row.observacao_aprovacao) {
       html += '<p style="font-size:12px; color:var(--text-muted); margin-top:10px;"><b>Observação:</b> '+esc(row.observacao_aprovacao)+'</p>';
     }
@@ -189,6 +228,12 @@
         var senha = card.querySelector('[data-senha]').value;
         var msgEl = card.querySelector('[data-msg]');
         msgEl.classList.remove('err');
+        var liberados = readEmpBox(card);
+        if (!liberados.length){
+          msgEl.textContent = 'Marque pelo menos um empreendimento liberado para essa imobiliária antes de aprovar.';
+          msgEl.classList.add('err');
+          return;
+        }
         if (!senha || senha.length < 8){
           msgEl.textContent = 'Defina uma senha inicial de acesso (mínimo 8 caracteres) antes de aprovar.';
           msgEl.classList.add('err');
@@ -215,7 +260,7 @@
             throw new Error((r.body && r.body.message) || 'Falha ao criar o acesso da imobiliária.');
           }
           return supa.from('imobiliarias').update({
-            status: 'aprovado', observacao_aprovacao: obs || null, aprovado_por: CURRENT_PROFILE.id, aprovado_em: new Date().toISOString()
+            status: 'aprovado', empreendimentos_liberados: liberados, observacao_aprovacao: obs || null, aprovado_por: CURRENT_PROFILE.id, aprovado_em: new Date().toISOString()
           }).eq('id', id);
         }).then(function(res){
           if (res.error) throw res.error;
@@ -230,8 +275,30 @@
     });
   }
 
+  function wireEmpSave(container){
+    container.querySelectorAll('[data-emp-save]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-emp-save');
+        var card = container.querySelector('.req-card[data-id="'+id+'"]');
+        var msgEl = card.querySelector('[data-emp-msg]');
+        var lista = readEmpBox(card);
+        msgEl.classList.remove('err');
+        if (!lista.length){ msgEl.textContent = 'Marque pelo menos um empreendimento.'; msgEl.classList.add('err'); return; }
+        btn.disabled = true; msgEl.textContent = 'Salvando…';
+        supa.from('imobiliarias').update({empreendimentos_liberados: lista}).eq('id', id).then(function(res){
+          btn.disabled = false;
+          if (res.error){ console.error(res.error); msgEl.textContent = 'Não foi possível salvar agora.'; msgEl.classList.add('err'); return; }
+          msgEl.textContent = 'Salvo.';
+        });
+      });
+    });
+  }
+
   function loadRequests(){
-    supa.from('imobiliarias').select('*').order('created_at', {ascending:false}).then(function(res){
+    supa.from('empreendimentos').select('nome,linha').then(function(er){
+      EMP_CATALOGO = ((er && er.data) || []).map(empLabel).filter(Boolean).sort();
+      return supa.from('imobiliarias').select('*').order('created_at', {ascending:false});
+    }).then(function(res){
       if (res.error){ console.error(res.error); return; }
       var rows = res.data || [];
       var pendentes = rows.filter(function(r){ return r.status === 'pendente'; });
@@ -247,6 +314,7 @@
       dList.innerHTML = decididas.map(function(r){ return renderReqCard(r, false); }).join('');
       document.getElementById('decididasEmpty').hidden = decididas.length > 0;
       wireDocLinks(dList);
+      wireEmpSave(dList);
     });
   }
 

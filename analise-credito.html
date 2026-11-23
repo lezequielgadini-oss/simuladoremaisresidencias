@@ -108,7 +108,8 @@
   <form id="analiseForm">
     <div class="step-card">
       <h2>Empreendimento</h2>
-      <div class="field"><label>Qual empreendimento</label><input type="text" id="fEmpreendimento" required></div>
+      <div class="field"><label>Qual empreendimento</label><select id="fEmpreendimento" required><option value="">Carregando…</option></select></div>
+      <p class="sub" id="empAviso" style="margin:0;" hidden></p>
     </div>
 
     <div class="step-card">
@@ -446,6 +447,23 @@
     });
   }
 
+  // Empreendimentos que a Emais liberou para a imobiliária do usuário (definidos na aprovação)
+  function loadEmpreendimentosLiberados(){
+    var sel = document.getElementById('fEmpreendimento');
+    var aviso = document.getElementById('empAviso');
+    supa.from('imobiliarias').select('empreendimentos_liberados').eq('id', CURRENT_PROFILE.imobiliaria_id).single().then(function(res){
+      var lista = (!res.error && res.data && Array.isArray(res.data.empreendimentos_liberados)) ? res.data.empreendimentos_liberados : [];
+      if (!lista.length){
+        sel.innerHTML = '<option value="">Nenhum empreendimento liberado</option>';
+        aviso.hidden = false;
+        aviso.textContent = 'Sua imobiliária ainda não tem empreendimento liberado para análise de crédito. Fale com a equipe comercial da Emais.';
+        document.getElementById('submitBtn').disabled = true;
+        return;
+      }
+      sel.innerHTML = '<option value="">Selecione o empreendimento…</option>' + lista.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join('');
+    });
+  }
+
   function boot(){
     if (!supa){ showGate('Não foi possível carregar a biblioteca de autenticação. Recarregue a página.'); return; }
     supa.auth.getSession().then(function(res){
@@ -466,7 +484,7 @@
         }
         document.getElementById('appShell').hidden = false;
         document.getElementById('userLabel').textContent = CURRENT_PROFILE.nome || CURRENT_PROFILE.email;
-        if (ehAdmin){ showAdminView(); }
+        if (ehAdmin){ showAdminView(); } else { loadEmpreendimentosLiberados(); }
       });
     });
   }

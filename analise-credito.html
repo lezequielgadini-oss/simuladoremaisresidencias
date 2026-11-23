@@ -183,7 +183,10 @@
       + '<div class="field"><label>E-mail</label><input type="email" id="'+p+'_email" required></div>'
       + '<div class="field"><label>Renda</label><input type="number" id="'+p+'_renda" min="0" step="50" required></div>'
       + '</div>'
+      + '<div class="grid2">'
       + '<div class="field"><label>Profissão</label><input type="text" id="'+p+'_profissao" required></div>'
+      + '<div class="field"><label>Desde quando exerce essa profissão? (data de início)</label><input type="date" id="'+p+'_profissaoDesde" max="'+new Date().toISOString().slice(0,10)+'" required></div>'
+      + '</div>'
       + (p==='cliente' ? '<div class="field"><label>Observações necessárias</label><textarea id="'+p+'_observacoes"></textarea></div>' : '')
       + '<div class="toggle-row">'
       + '<label>Teve férias, desconto ou comissão variável no período?</label>'
@@ -255,6 +258,7 @@
       email: document.getElementById(p+'_email').value.trim(),
       renda: parseFloat(document.getElementById(p+'_renda').value) || 0,
       profissao: document.getElementById(p+'_profissao').value.trim(),
+      profissao_desde: document.getElementById(p+'_profissaoDesde').value,
       renda_variavel: varRenda
     };
     var obsEl = document.getElementById(p+'_observacoes');
@@ -363,6 +367,7 @@
     var d = new Date(iso);
     return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
   }
+  function fmtData(iso){ var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); return m ? m[3]+'/'+m[2]+'/'+m[1] : (iso||''); }
   var DOC_LABELS = {holerite1:'Holerite mais recente', holerite2:'Penúltimo holerite', holerite3:'Antepenúltimo holerite', docPessoal:'RG/CPF', comprovanteResidencia:'Comprovante de residência', certidaoEstadoCivil:'Certidão de estado civil', carteiraTrabalho:'Carteira de trabalho'};
 
   function docsHtml(docs, titulo){
@@ -383,7 +388,7 @@
 
   function personLine(pessoa){
     if (!pessoa) return '';
-    return '<b>'+esc(pessoa.nome)+'</b> &middot; '+esc(pessoa.telefone)+' &middot; '+esc(pessoa.email)+' &middot; renda R$ '+esc(pessoa.renda)+' &middot; '+esc(pessoa.profissao);
+    return '<b>'+esc(pessoa.nome)+'</b> &middot; '+esc(pessoa.telefone)+' &middot; '+esc(pessoa.email)+' &middot; renda R$ '+esc(pessoa.renda)+' &middot; '+esc(pessoa.profissao)+(pessoa.profissao_desde ? ' (desde '+esc(fmtData(pessoa.profissao_desde))+')' : '');
   }
 
   function renderAnalise(row, imobMap){

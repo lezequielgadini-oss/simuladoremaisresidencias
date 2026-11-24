@@ -3073,9 +3073,24 @@
         if (dc) return dc.y+'-'+String(dc.m).padStart(2,'0')+'-'+String(dc.d).padStart(2,'0');
       }catch(e){}
     }
-    // Texto (inclusive datas inválidas digitadas como texto na planilha, ex.:
-    // "31/11/2027") é preservado exatamente como está — nunca "corrigido".
-    return v==null ? '' : String(v).trim();
+    // Texto: datas digitadas como texto (dd/mm/aaaa ou aaaa-mm-dd) são
+    // normalizadas pra aaaa-mm-dd. Se o dia não existe naquele mês (ex.:
+    // "31/11/2027"), usa o último dia do mês (30/11/2027) em vez de quebrar
+    // os cálculos que dependem da data. Qualquer outro texto fica como está.
+    var t = v==null ? '' : String(v).trim();
+    var mt = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+    var dia, mes, ano;
+    if (mt){ dia = +mt[1]; mes = +mt[2]; ano = +mt[3]; }
+    else {
+      var mi = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t);
+      if (mi){ ano = +mi[1]; mes = +mi[2]; dia = +mi[3]; }
+    }
+    if (ano && mes >= 1 && mes <= 12 && dia >= 1 && dia <= 31){
+      var ultimo = new Date(ano, mes, 0).getDate();
+      if (dia > ultimo) dia = ultimo;
+      return ano+'-'+String(mes).padStart(2,'0')+'-'+String(dia).padStart(2,'0');
+    }
+    return t;
   }
   function catalogPad2(v){
     if (v==null) return '';

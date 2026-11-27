@@ -88,7 +88,8 @@ td input[type=text],td input[type=number],td select{width:100%;min-width:70px;pa
 (function (root) {
   'use strict';
   const r2 = x => { const s = x < 0 ? -1 : 1; return s * Math.round(Math.abs(x) * 100 + 1e-7) / 100; };
-  const isNum = x => typeof x === 'number' && isFinite(x);
+  const normTip = t => String(t == null ? '' : t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+const isNum = x => typeof x === 'number' && isFinite(x);
 
   function Engine(S) {
     const cache = new Map();
@@ -151,7 +152,9 @@ td input[type=text],td input[type=number],td select{width:100%;min-width:70px;pa
         const pool = byComp[v.comp] || [];
         for (const ru of rules) {
           if (ru.emp && ru.emp !== v.emp) continue;
+          if (ru.tip && normTip(ru.tip) !== normTip(v.tip)) continue;
           const n = pool.filter(x =>
+            (ru.tip ? normTip(x.v.tip) === normTip(ru.tip) : true) &&
             (ru.escopo === 'Corretor' ? x.b === benef : true) &&
             (ru.emp ? x.v.emp === ru.emp : (ru.escopo === 'Empreendimento' ? x.v.emp === v.emp : true))
           ).length;
@@ -382,7 +385,7 @@ async function mut(label, fn, keys) {
 /* ---------- fotografia de fechamento (arquivo imutavel mes a mes) ---------- */
 function snapshot(M, md) {
   const b = ENG.build(M);
-  const slim = v => ({ id: v.id, pv: v.pv, comp: v.comp, emp: v.emp, bl: v.bl, ap: v.ap, cliente: v.cliente, corretor: v.corretor, imobiliaria: v.imobiliaria || null, sit: v.sit, j: v.j, vv: v.vv, vp: v.vp, dt_pv: v.dt_pv, dt_ef: v.dt_ef, origem: v.origem });
+  const slim = v => ({ id: v.id, pv: v.pv, comp: v.comp, emp: v.emp, tip: v.tip || null, bl: v.bl, ap: v.ap, cliente: v.cliente, corretor: v.corretor, imobiliaria: v.imobiliaria || null, sit: v.sit, j: v.j, vv: v.vv, vp: v.vp, dt_pv: v.dt_pv, dt_ef: v.dt_ef, origem: v.origem });
   const fz = v => { try { return ENG.freeze(v); } catch (e) { return ENG.calc(v); } };
   const rows = b.rows.map(x => ({ v: slim(x.v), c: fz(x.v) }));
   const mapB = x => ({ benef: x.benef, tipo: x.tipo, n: x.n, vv: x.vv, com: x.com, ato: x.ato, agora: x.agora, pend: x.pend, pendReg: x.pendReg, prem: x.prem, total: x.total });
@@ -506,7 +509,7 @@ function tabVendas() {
   }
   return `<div class="card"><h2>Importar relatório de vendas em ${compLabel(S.comp)}</h2>
     ${closed ? '<div class="msg warn">Este mês está fechado. Escolha uma competência aberta no topo para importar.</div>' : ''}
-    <p class="muted small">Copie no Excel as colunas A a M do relatório (Empreendimento, BL, AP, PV, Dt. PV, Status PV, Cliente, VV Original, VV, Valor Prazo, Dt. Efetiv, Corretor, Parcelamento), com ou sem a linha de título, e cole abaixo.</p>
+    <p class="muted small">Copie no Excel as colunas A a N do relatório (Empreendimento, BL, AP, PV, Dt. PV, Status PV, Cliente, VV Original, VV, Valor Prazo, Dt. Efetiv, Corretor, Parcelamento e Tipologia na última coluna), com ou sem a linha de título, e cole abaixo.</p>
     <textarea id="pasteV" data-inp="pasteV" placeholder="Cole aqui" ${closed ? 'disabled' : ''}>${esc(S.pasteV)}</textarea>
     <div class="row" style="margin-top:8px"><button class="btn primary" data-act="analisarVendas" ${closed ? 'disabled' : ''}>Analisar</button><span class="muted small">Nada é gravado nesta etapa.</span></div>
     ${prev}</div>`;
@@ -520,7 +523,7 @@ function analisarVendas() {
   data.forEach(r => {
     const pv = String(r[3] || '').trim();
     if (!/^\d+$/.test(pv)) { ign++; return; }
-    const it = { pv, emp: empCanon(String(r[0] || '').trim()), bl: String(r[1] || '').trim(), ap: String(r[2] || '').trim(), dt_pv: parseDate(r[4]), status: String(r[5] || '').trim(), cliente: String(r[6] || '').replace(/\s+/g, ' ').trim(), j: parseNum(r[7]), vv: parseNum(r[8]), vp: parseNum(r[9]), dt_ef: parseDate(r[10]), corretor: String(r[11] || '').replace(/\s+/g, ' ').trim(), parc: String(r[12] || '').trim(), flags: [] };
+    const it = { pv, emp: empCanon(String(r[0] || '').trim()), bl: String(r[1] || '').trim(), ap: String(r[2] || '').trim(), dt_pv: parseDate(r[4]), status: String(r[5] || '').trim(), cliente: String(r[6] || '').replace(/\s+/g, ' ').trim(), j: parseNum(r[7]), vv: parseNum(r[8]), vp: parseNum(r[9]), dt_ef: parseDate(r[10]), corretor: String(r[11] || '').replace(/\s+/g, ' ').trim(), parc: String(r[12] || '').trim(), tip: String(r[13] || '').replace(/\s+/g, ' ').trim(), flags: [] };
     const ex = ativos.get(pv);
     if (ex) it.flags.push(`PV já ativo em ${compLabel(ex.comp)}. Confirma duplicidade ou pagamento de saldo?`);
     if (seen.has(pv)) it.flags.push('PV repetido neste arquivo');
@@ -534,7 +537,7 @@ function analisarVendas() {
   const empsComParam = new Set(S.params.filter(p => p.comp === S.comp).map(p => p.emp));
   const semParam = [...new Set(items.map(i => i.emp).filter(e => e && !empsComParam.has(e)))];
   S.prevV = { items, novosCorr, semParam };
-  S.flash = items.length ? { t: 'ok', m: `${items.length} linha(s) lidas${ign ? `, ${ign} ignorada(s) (título ou linha sem PV)` : ''}. Confira os avisos antes de gravar.` } : { t: 'err', m: 'Não encontrei linhas com PV numérico. Confira se colou as colunas A a M.' };
+  S.flash = items.length ? { t: 'ok', m: `${items.length} linha(s) lidas${ign ? `, ${ign} ignorada(s) (título ou linha sem PV)` : ''}. Confira os avisos antes de gravar.` } : { t: 'err', m: 'Não encontrei linhas com PV numérico. Confira se colou as colunas A a N.' };
 }
 async function gravarVendas() {
   const pv = S.prevV; if (!pv) return;
@@ -543,7 +546,7 @@ async function gravarVendas() {
   const ok = await mut('Gravando vendas…', () => {
     pv.novosCorr.forEach(c => { if (!S.corr.some(x => x.nome === c)) S.corr.push({ nome: c, nome_padrao: c, tipo: null, exige: false }); });
     S.corr.sort((a, b) => a.nome.localeCompare(b.nome));
-    sel.forEach(x => S.vendas.push({ id: nid(), comp: M, origem: 'Importação', emp: x.emp, bl: x.bl, ap: x.ap, pv: x.pv, dt_pv: x.dt_pv, status: x.status, cliente: x.cliente, j: x.j, vv: x.vv, vp: x.vp, dt_ef: x.dt_ef, corretor: x.corretor, parcelamento: x.parc, imobiliaria: null, sit: 'Ativo', cr: null, s_pct: null, s_ato: null, s_prem: null, fechado_em: null, pag_em: null, fechado: null }));
+    sel.forEach(x => S.vendas.push({ id: nid(), comp: M, origem: 'Importação', emp: x.emp, bl: x.bl, ap: x.ap, pv: x.pv, dt_pv: x.dt_pv, status: x.status, cliente: x.cliente, j: x.j, vv: x.vv, vp: x.vp, dt_ef: x.dt_ef, corretor: x.corretor, parcelamento: x.parc, tip: x.tip || null, imobiliaria: null, sit: 'Ativo', cr: null, s_pct: null, s_ato: null, s_prem: null, fechado_em: null, pag_em: null, fechado: null }));
   }, ['corr', 'vendas:' + M]);
   if (ok) {
     S.pasteV = ''; S.prevV = null;
@@ -614,6 +617,7 @@ function tabParam() {
   const prs = S.premios.filter(p => p.comp === S.comp);
   const md = S.modos[S.comp] || { modo: '100%', pctnr: 0, pc: 0.0028, pd: 0.0012 };
   const emps = knownEmps();
+  const tips = [...new Set(['Garden', ...S.vendas.map(v => v.tip), ...prs.map(p => p.tip)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const empSel = (cur, id) => `<select data-chg="param" data-id="${id}" data-f="emp">${[...new Set([cur, ...emps])].filter(Boolean).map(e => `<option ${e === cur ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>`;
   const pin = (p, f, isPct) => `<input type="text" data-chg="param" data-id="${p.id}" data-f="${f}" value="${p[f] == null ? '' : (isPct ? (p[f] * 100).toString().replace('.', ',') : p[f])}" style="width:${isPct ? 90 : 70}px">`;
   return `
@@ -626,14 +630,15 @@ function tabParam() {
     <div class="row" style="margin-top:8px"><button class="btn" data-act="addParam">Adicionar linha</button><button class="btn" data-act="copyParam">Copiar parâmetros do mês anterior</button></div>
   </div>
   <div class="card"><h2>Premiação em ${compLabel(S.comp)}</h2>
-    <p class="muted small">Até 3 regras por mês. Ao atingir a meta mínima de vendas (por corretor ou por empreendimento), cada venda ganha o adicional. Deixe o empreendimento em branco para valer para todos.</p>
-    <div class="tbl"><table><thead><tr><th>Conta vendas por</th><th>Empreendimento</th><th>Meta mínima</th><th>Adicional</th><th>Valor (% ou R$)</th><th></th></tr></thead><tbody>
+    <p class="muted small">Até 3 regras por mês. Ao atingir a meta mínima de vendas (por corretor ou por empreendimento), cada venda ganha o adicional. Deixe o empreendimento em branco para valer para todos. Em Tipologia (última coluna do relatório de vendas, como Garden), a regra só vale para vendas dessa tipologia e só conta essas vendas na meta. Para pagar o adicional em toda venda Garden, use meta mínima 1.</p>
+    <div class="tbl"><table><thead><tr><th>Conta vendas por</th><th>Empreendimento</th><th>Tipologia</th><th>Meta mínima</th><th>Adicional</th><th>Valor (% ou R$)</th><th></th></tr></thead><tbody>
     ${prs.map(p => `<tr><td><select data-chg="prem" data-id="${p.id}" data-f="escopo">${['Corretor', 'Empreendimento'].map(e => `<option ${p.escopo === e ? 'selected' : ''}>${e}</option>`).join('')}</select></td>
       <td><select data-chg="prem" data-id="${p.id}" data-f="emp"><option value=""></option>${emps.map(e => `<option ${p.emp === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></td>
+      <td><select data-chg="prem" data-id="${p.id}" data-f="tip"><option value=""></option>${tips.map(e => `<option ${p.tip === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></td>
       <td><input type="text" data-chg="prem" data-id="${p.id}" data-f="meta" value="${p.meta == null ? '' : p.meta}" style="width:70px"></td>
       <td><select data-chg="prem" data-id="${p.id}" data-f="tipo">${['% do VV Original', 'R$ por venda'].map(e => `<option ${p.tipo === e ? 'selected' : ''}>${e}</option>`).join('')}</select></td>
       <td><input type="text" data-chg="prem" data-id="${p.id}" data-f="valor" value="${p.valor == null ? '' : (p.tipo === '% do VV Original' ? (p.valor * 100).toString().replace('.', ',') : p.valor.toString().replace('.', ','))}" style="width:90px"></td>
-      <td><button class="btn sm danger" data-act="delPrem" data-id="${p.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Sem premiação neste mês.</td></tr>'}
+      <td><button class="btn sm danger" data-act="delPrem" data-id="${p.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Sem premiação neste mês.</td></tr>'}
     </tbody></table></div>
     <div class="row" style="margin-top:8px"><button class="btn" data-act="addPrem" ${prs.length >= 3 ? 'disabled' : ''}>Adicionar regra</button><button class="btn" data-act="copyPrem">Copiar regras do mês anterior</button></div>
   </div>
@@ -673,7 +678,7 @@ function tabBase() {
   const rowHtml = ({ v, c }) => {
     const lock = closedRow(v);
     const al = c.alerta ? `<span class="pill ${c.alerta === 'Contrato não registrado' ? 'mut' : 'warn'}">${esc(c.alerta)}</span>` : '';
-    return `<tr><td>${esc(v.pv)}</td><td>${compLabel(v.comp)}</td><td>${esc(v.emp)}</td><td>${esc(v.cliente)}</td><td>${esc(v.corretor)}</td>
+    return `<tr><td>${esc(v.pv)}</td><td>${compLabel(v.comp)}</td><td>${esc(v.emp)}</td><td>${esc(v.tip || '')}</td><td>${esc(v.cliente)}</td><td>${esc(v.corretor)}</td>
     <td><input type="text" data-chg="venda" data-id="${v.id}" data-f="imobiliaria" value="${esc(v.imobiliaria || '')}" ${lock ? 'disabled' : ''} style="width:170px" placeholder="${c.alerta === 'Informar imobiliária' ? 'Informar' : ''}"></td>
     <td>${esc(c.tipo)}</td><td>${esc(c.reg)}</td><td class="n">${num(v.j)}</td><td class="n">${typeof c.pct === 'number' ? pc(c.pct) : esc(c.pct)}</td><td class="n">${num(c.com)}</td><td class="n">${typeof c.atoPct === 'number' ? pc(c.atoPct, 0) : esc(c.atoPct)}</td><td class="n">${num(c.agora)}</td><td class="n">${num(c.pend)}</td><td class="n">${num(c.prem)}</td><td>${al}</td>
     <td><select data-chg="venda" data-id="${v.id}" data-f="sit" ${lock ? 'disabled' : ''}>${['Ativo', 'Cancelado'].map(s => `<option ${v.sit === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td></tr>`;
@@ -685,8 +690,8 @@ function tabBase() {
       <label><input type="checkbox" data-chg="bf" data-f="soPend" ${f.soPend ? 'checked' : ''}> Só com alerta</label>
       <span class="muted small">${items.length} linha(s)</span></div>
     <p class="muted small">Informe a imobiliária para os corretores que exigem (JOSÉ EDUARDO CORTEZ e JOSÉ ANTONIO GOMES). Marque Cancelado para uma venda sair do cálculo. Linhas de meses fechados ficam travadas.</p>
-    <div class="tbl" style="max-height:640px"><table><thead><tr><th>PV</th><th>Comp.</th><th>Empreendimento</th><th>Cliente</th><th>Corretor</th><th>Imobiliária</th><th>Tipo</th><th>Registro</th><th class="n">VV Original</th><th class="n">% com.</th><th class="n">Comissão</th><th class="n">% ato</th><th class="n">A pagar agora</th><th class="n">Pendente</th><th class="n">Prêmio</th><th>Alerta</th><th>Situação</th></tr></thead><tbody>
-    ${show.map(rowHtml).join('') || '<tr><td colspan="17" class="muted">Nada para mostrar.</td></tr>'}</tbody></table></div>
+    <div class="tbl" style="max-height:640px"><table><thead><tr><th>PV</th><th>Comp.</th><th>Empreendimento</th><th>Tipologia</th><th>Cliente</th><th>Corretor</th><th>Imobiliária</th><th>Tipo</th><th>Registro</th><th class="n">VV Original</th><th class="n">% com.</th><th class="n">Comissão</th><th class="n">% ato</th><th class="n">A pagar agora</th><th class="n">Pendente</th><th class="n">Prêmio</th><th>Alerta</th><th>Situação</th></tr></thead><tbody>
+    ${show.map(rowHtml).join('') || '<tr><td colspan="18" class="muted">Nada para mostrar.</td></tr>'}</tbody></table></div>
     ${items.length > show.length ? `<div style="margin-top:8px"><button class="btn" data-act="maisBase">Mostrar mais (${items.length - show.length} restantes)</button></div>` : ''}</div>`;
 }
 
@@ -906,7 +911,7 @@ document.addEventListener('click', async e => {
       await mut('Copiando…', () => { S.params.filter(p => p.comp === prev).forEach(p => S.params.push({ ...p, id: nid(), comp: S.comp })); }, ['params']);
       S.flash = { t: 'ok', m: 'Parâmetros copiados de ' + compLabel(prev) + '. Revise os percentuais.' }; render(); break;
     }
-    case 'addPrem': await mut('Adicionando…', () => { S.premios.push({ id: nid(), comp: S.comp, escopo: 'Corretor', emp: null, meta: 5, tipo: 'R$ por venda', valor: 0 }); }, ['premios']); break;
+    case 'addPrem': await mut('Adicionando…', () => { S.premios.push({ id: nid(), comp: S.comp, escopo: 'Corretor', emp: null, tip: null, meta: 5, tipo: 'R$ por venda', valor: 0 }); }, ['premios']); break;
     case 'delPrem': await mut('Excluindo…', () => { S.premios = S.premios.filter(p => p.id !== +t.dataset.id); }, ['premios']); break;
     case 'copyPrem': {
       const prev = [...new Set(S.premios.map(p => p.comp))].filter(c => c < S.comp).sort().pop();
@@ -932,7 +937,7 @@ document.addEventListener('click', async e => {
     case 'baixaGrupo': { const b = B(); const l = listaGrupo(b, S.grupo).sort((x, y) => x.benef.localeCompare(y.benef, 'pt-BR')); if (!l.length) break; await baixar(`comissoes_${S.grupo}_${S.comp.slice(0, 7)}.html`, docHtml(l.map(x => secaoHtml(b, x.benef)), 'Demonstrativos de comissões')); break; }
     case 'baixaCsv': { const b = B(); const l = listaGrupo(b, S.grupo); const h = ['Beneficiario', 'Vendas', 'VV Original', 'Comissao', 'No ato', 'A pagar agora', 'Pendente', 'Saldo regularizado', 'Premiacao', 'Total a pagar']; const csv = [h.join(';')].concat(l.map(x => [x.benef, x.n, x.vv, x.com, x.ato, x.agora, x.pend, x.pendReg, x.prem, x.total].map(csvCell).join(';'))).join('\r\n'); await baixar(`resumo_${S.grupo}_${S.comp.slice(0, 7)}.csv`, '﻿' + csv); break; }
     case 'baixaBackup': case 'baixaBackupFechar': await baixar(`backup_comissoes_${new Date().toISOString().slice(0, 10)}.json`, backupJson()); break;
-    case 'baixaBaseCsv': { const h = ['Competencia', 'PV', 'Empreendimento', 'Cliente', 'Corretor', 'Imobiliaria', 'Beneficiario', 'Tipo', 'Registro', 'VV Original', 'Comissao', 'No ato', 'A pagar agora', 'Pendente', 'Premiacao', 'Situacao']; const csv = [h.join(';')].concat(S.vendas.map(v => { const c = ENG.calc(v); return [compLabel(v.comp), v.pv, v.emp, v.cliente, v.corretor, v.imobiliaria || '', c.benef, c.tipo, c.reg, v.j, c.com, c.ato, c.agora, c.pend, c.prem, v.sit].map(csvCell).join(';'); })).join('\r\n'); await baixar('base_comissoes.csv', '﻿' + csv); break; }
+    case 'baixaBaseCsv': { const h = ['Competencia', 'PV', 'Empreendimento', 'Tipologia', 'Cliente', 'Corretor', 'Imobiliaria', 'Beneficiario', 'Tipo', 'Registro', 'VV Original', 'Comissao', 'No ato', 'A pagar agora', 'Pendente', 'Premiacao', 'Situacao']; const csv = [h.join(';')].concat(S.vendas.map(v => { const c = ENG.calc(v); return [compLabel(v.comp), v.pv, v.emp, v.tip || '', v.cliente, v.corretor, v.imobiliaria || '', c.benef, c.tipo, c.reg, v.j, c.com, c.ato, c.agora, c.pend, c.prem, v.sit].map(csvCell).join(';'); })).join('\r\n'); await baixar('base_comissoes.csv', '﻿' + csv); break; }
     case 'fecharPre': fecharPre(); render(); break;
     case 'fecharOk': await fecharOk(); break;
     case 'reabrir': reabrir(); render(); break;

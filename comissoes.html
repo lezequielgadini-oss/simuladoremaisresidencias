@@ -114,16 +114,18 @@ const isNum = x => typeof x === 'number' && isFinite(x);
     const rulesByComp = {};
     S.premios.slice().sort((a, b) => a.id - b.id).forEach(p => { (rulesByComp[p.comp] = rulesByComp[p.comp] || []).push(p); });
 
-    function paramMatch(v) {
+    function paramMatch(v, tipo) {
       const parc = Number(v.parcelamento) || 0;
-      return S.params.filter(p => p.comp === v.comp && p.emp === v.emp && parc >= (p.de == null ? 0 : p.de) && parc <= (p.ate == null ? 999999 : p.ate));
+      const all = S.params.filter(p => p.comp === v.comp && p.emp === v.emp && parc >= (p.de == null ? 0 : p.de) && parc <= (p.ate == null ? 999999 : p.ate));
+      const esp = all.filter(p => p.pub && p.pub === tipo);
+      return esp.length ? esp : all.filter(p => !p.pub);
     }
 
     function live(v) {
       const cancel = v.sit === 'Cancelado';
       const benef = benefOf(v);
       const tipo = tipoOf(benef);
-      const Pm = paramMatch(v);
+      const Pm = paramMatch(v, tipo);
       const Pc = Pm.filter(p => p.pct != null);
       const one = Pc.length === 1;
       const reg = v.cr ? v.cr : (S.regs.has(v.pv) ? 'Sim' : 'Não');
@@ -153,8 +155,10 @@ const isNum = x => typeof x === 'number' && isFinite(x);
         for (const ru of rules) {
           if (ru.emp && ru.emp !== v.emp) continue;
           if (ru.tip && normTip(ru.tip) !== normTip(v.tip)) continue;
+          if (ru.pub && ru.pub !== tipo) continue;
           const n = pool.filter(x =>
             (ru.tip ? normTip(x.v.tip) === normTip(ru.tip) : true) &&
+            (ru.pub ? tipoOf(x.b) === ru.pub : true) &&
             (ru.escopo === 'Corretor' ? x.b === benef : true) &&
             (ru.emp ? x.v.emp === ru.emp : (ru.escopo === 'Empreendimento' ? x.v.emp === v.emp : true))
           ).length;
@@ -623,22 +627,23 @@ function tabParam() {
   return `
   <div class="card"><h2>Parâmetros de comissão em ${compLabel(S.comp)}</h2>
     ${closed ? '<div class="msg warn">Mês fechado. Alterar parâmetros não muda vendas já congeladas.</div>' : ''}
-    <p class="muted small">Uma linha por empreendimento e faixa de parcelas. % de comissão incide sobre o VV Original. "% pago se não registrado" é o percentual do valor no ato pago enquanto o contrato não está registrado. A fase define o % no ato: Lançamento ${pc(S.cfg.lanc)} e Estoque ${pc(S.cfg.est)} para corretor interno; imobiliária sempre ${pc(S.cfg.imob)}.</p>
-    <div class="tbl"><table><thead><tr><th>Empreendimento</th><th>Fase</th><th>Parc. de</th><th>Parc. até</th><th>% comissão</th><th>% pago se não registrado</th><th></th></tr></thead><tbody>
-    ${ps.map(p => `<tr><td>${empSel(p.emp, p.id)}</td><td><select data-chg="param" data-id="${p.id}" data-f="fase"><option value=""></option>${['Lançamento', 'Estoque'].map(f => `<option ${p.fase === f ? 'selected' : ''}>${f}</option>`).join('')}</select></td><td>${pin(p, 'de')}</td><td>${pin(p, 'ate')}</td><td>${pin(p, 'pct', 1)}</td><td>${pin(p, 'pctnr', 1)}</td><td><button class="btn sm danger" data-act="delParam" data-id="${p.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nenhum parâmetro neste mês.</td></tr>'}
+    <p class="muted small">Uma linha por empreendimento e faixa de parcelas. Em "Vale para", deixe Todos para valer para qualquer corretor, ou crie uma linha para Interno e outra para Imobiliária com % diferentes (a linha específica prevalece sobre a de Todos). % de comissão incide sobre o VV Original. "% pago se não registrado" é o percentual do valor no ato pago enquanto o contrato não está registrado. A fase define o % no ato: Lançamento ${pc(S.cfg.lanc)} e Estoque ${pc(S.cfg.est)} para corretor interno; imobiliária sempre ${pc(S.cfg.imob)}.</p>
+    <div class="tbl"><table><thead><tr><th>Empreendimento</th><th>Vale para</th><th>Fase</th><th>Parc. de</th><th>Parc. até</th><th>% comissão</th><th>% pago se não registrado</th><th></th></tr></thead><tbody>
+    ${ps.map(p => `<tr><td>${empSel(p.emp, p.id)}</td><td><select data-chg="param" data-id="${p.id}" data-f="pub"><option value="">Todos</option>${['Interno', 'Imobiliária'].map(f => `<option ${p.pub === f ? 'selected' : ''}>${f}</option>`).join('')}</select></td><td><select data-chg="param" data-id="${p.id}" data-f="fase"><option value=""></option>${['Lançamento', 'Estoque'].map(f => `<option ${p.fase === f ? 'selected' : ''}>${f}</option>`).join('')}</select></td><td>${pin(p, 'de')}</td><td>${pin(p, 'ate')}</td><td>${pin(p, 'pct', 1)}</td><td>${pin(p, 'pctnr', 1)}</td><td><button class="btn sm danger" data-act="delParam" data-id="${p.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nenhum parâmetro neste mês.</td></tr>'}
     </tbody></table></div>
     <div class="row" style="margin-top:8px"><button class="btn" data-act="addParam">Adicionar linha</button><button class="btn" data-act="copyParam">Copiar parâmetros do mês anterior</button></div>
   </div>
   <div class="card"><h2>Premiação em ${compLabel(S.comp)}</h2>
-    <p class="muted small">Até 3 regras por mês. Ao atingir a meta mínima de vendas (por corretor ou por empreendimento), cada venda ganha o adicional. Deixe o empreendimento em branco para valer para todos. Em Tipologia (última coluna do relatório de vendas, como Garden), a regra só vale para vendas dessa tipologia e só conta essas vendas na meta. Para pagar o adicional em toda venda Garden, use meta mínima 1.</p>
-    <div class="tbl"><table><thead><tr><th>Conta vendas por</th><th>Empreendimento</th><th>Tipologia</th><th>Meta mínima</th><th>Adicional</th><th>Valor (% ou R$)</th><th></th></tr></thead><tbody>
+    <p class="muted small">Até 3 regras por mês. Ao atingir a meta mínima de vendas (por corretor ou por empreendimento), cada venda ganha o adicional. Deixe o empreendimento em branco para valer para todos. Em "Vale para", escolha Interno ou Imobiliária para a regra valer só para esse tipo de beneficiário (e só contar as vendas dele na meta). Em Tipologia (última coluna do relatório de vendas, como Garden), a regra só vale para vendas dessa tipologia e só conta essas vendas na meta. Para pagar o adicional em toda venda Garden, use meta mínima 1.</p>
+    <div class="tbl"><table><thead><tr><th>Conta vendas por</th><th>Empreendimento</th><th>Vale para</th><th>Tipologia</th><th>Meta mínima</th><th>Adicional</th><th>Valor (% ou R$)</th><th></th></tr></thead><tbody>
     ${prs.map(p => `<tr><td><select data-chg="prem" data-id="${p.id}" data-f="escopo">${['Corretor', 'Empreendimento'].map(e => `<option ${p.escopo === e ? 'selected' : ''}>${e}</option>`).join('')}</select></td>
       <td><select data-chg="prem" data-id="${p.id}" data-f="emp"><option value=""></option>${emps.map(e => `<option ${p.emp === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></td>
+      <td><select data-chg="prem" data-id="${p.id}" data-f="pub"><option value="">Todos</option>${['Interno', 'Imobiliária'].map(e => `<option ${p.pub === e ? 'selected' : ''}>${e}</option>`).join('')}</select></td>
       <td><select data-chg="prem" data-id="${p.id}" data-f="tip"><option value=""></option>${tips.map(e => `<option ${p.tip === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></td>
       <td><input type="text" data-chg="prem" data-id="${p.id}" data-f="meta" value="${p.meta == null ? '' : p.meta}" style="width:70px"></td>
       <td><select data-chg="prem" data-id="${p.id}" data-f="tipo">${['% do VV Original', 'R$ por venda'].map(e => `<option ${p.tipo === e ? 'selected' : ''}>${e}</option>`).join('')}</select></td>
       <td><input type="text" data-chg="prem" data-id="${p.id}" data-f="valor" value="${p.valor == null ? '' : (p.tipo === '% do VV Original' ? (p.valor * 100).toString().replace('.', ',') : p.valor.toString().replace('.', ','))}" style="width:90px"></td>
-      <td><button class="btn sm danger" data-act="delPrem" data-id="${p.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Sem premiação neste mês.</td></tr>'}
+      <td><button class="btn sm danger" data-act="delPrem" data-id="${p.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="8" class="muted">Sem premiação neste mês.</td></tr>'}
     </tbody></table></div>
     <div class="row" style="margin-top:8px"><button class="btn" data-act="addPrem" ${prs.length >= 3 ? 'disabled' : ''}>Adicionar regra</button><button class="btn" data-act="copyPrem">Copiar regras do mês anterior</button></div>
   </div>
@@ -901,7 +906,7 @@ document.addEventListener('click', async e => {
     case 'gravarRegs': await gravarRegs(); break;
     case 'rmReg': { const pv = (val('rmPv') || '').trim(); if (!/^\d+$/.test(pv)) { S.flash = { t: 'err', m: 'Informe um PV numérico.' }; render(); break; } const ok = await mut('Removendo registro…', () => { S.regsInfo = S.regsInfo.filter(r => String(r.pv) !== pv); }, ['regs']); if (ok) { S.flash = { t: 'ok', m: 'Registro do PV ' + esc(pv) + ' removido (se existia).' }; render(); } break; }
     case 'maisBase': S.baseFilter.lim += 200; render(); break;
-    case 'addParam': await mut('Adicionando…', () => { S.params.push({ id: nid(), comp: S.comp, emp: knownEmps()[0] || 'EMPREENDIMENTO', fase: null, de: 0, ate: 999, pct: null, pctnr: 0 }); }, ['params']); break;
+    case 'addParam': await mut('Adicionando…', () => { S.params.push({ id: nid(), comp: S.comp, emp: knownEmps()[0] || 'EMPREENDIMENTO', pub: null, fase: null, de: 0, ate: 999, pct: null, pctnr: 0 }); }, ['params']); break;
     case 'delParam': await mut('Excluindo…', () => { S.params = S.params.filter(p => p.id !== +t.dataset.id); }, ['params']); break;
     case 'copyParam': {
       const prev = [...new Set(S.params.map(p => p.comp))].filter(c => c < S.comp).sort().pop();
@@ -911,7 +916,7 @@ document.addEventListener('click', async e => {
       await mut('Copiando…', () => { S.params.filter(p => p.comp === prev).forEach(p => S.params.push({ ...p, id: nid(), comp: S.comp })); }, ['params']);
       S.flash = { t: 'ok', m: 'Parâmetros copiados de ' + compLabel(prev) + '. Revise os percentuais.' }; render(); break;
     }
-    case 'addPrem': await mut('Adicionando…', () => { S.premios.push({ id: nid(), comp: S.comp, escopo: 'Corretor', emp: null, tip: null, meta: 5, tipo: 'R$ por venda', valor: 0 }); }, ['premios']); break;
+    case 'addPrem': await mut('Adicionando…', () => { S.premios.push({ id: nid(), comp: S.comp, escopo: 'Corretor', emp: null, pub: null, tip: null, meta: 5, tipo: 'R$ por venda', valor: 0 }); }, ['premios']); break;
     case 'delPrem': await mut('Excluindo…', () => { S.premios = S.premios.filter(p => p.id !== +t.dataset.id); }, ['premios']); break;
     case 'copyPrem': {
       const prev = [...new Set(S.premios.map(p => p.comp))].filter(c => c < S.comp).sort().pop();

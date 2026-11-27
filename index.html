@@ -188,7 +188,8 @@
   var MODULES = [
     {id:'simulador', nome:'Simulador de vendas', desc:'Monte simulações de financiamento MCMV / pró-soluto por empreendimento.', icon:'📐', href:'simulador.html', papeis:['corretor_interno','coordenador_vendas','administrador']},
     {id:'parceiros', nome:'Imobiliárias parceiras', desc:'Analise e aprove solicitações de cadastro de imobiliárias parceiras.', icon:'🤝', href:'imobiliarias.html', papeis:['administrador']},
-    {id:'analise_credito', nome:'Análise de crédito', desc:'Envie a documentação de um cliente para análise de crédito.', icon:'📄', href:'analise-credito.html', papeis:['imobiliaria','corretor_imobiliaria','administrador']}
+    {id:'analise_credito', nome:'Análise de crédito', desc:'Envie a documentação de um cliente para análise de crédito.', icon:'📄', href:'analise-credito.html', papeis:['imobiliaria','corretor_imobiliaria','administrador']},
+    {id:'apuracao_comissoes', nome:'Apuração de comissões', desc:'Fechamento mensal de comissões de corretores, imobiliárias, coordenador e diretor.', icon:'💰', href:'https://claude.ai/artifact/XFjH2UJJs4J9Sm5iZUyhht', externo:true, papeis:['administrador']}
   ];
 
   function showLogin(msg, isErr){
@@ -208,7 +209,7 @@
     var allowed = MODULES.filter(function(m){ return m.papeis.indexOf(profile.papel) !== -1; });
     document.getElementById('modulesEmpty').hidden = allowed.length > 0;
     grid.innerHTML = allowed.map(function(m){
-      return '<a class="module-card" href="'+esc(m.href)+'">'
+      return '<a class="module-card" href="'+esc(m.href)+'"'+(m.externo?' target="_blank" rel="noopener noreferrer"':'')+'>'
         + '<span class="ic">'+m.icon+'</span>'
         + '<h3>'+esc(m.nome)+'</h3>'
         + '<p>'+esc(m.desc)+'</p>'
